@@ -10,4 +10,5 @@ spec:
       name: longhorn
   cors:
     allowOrigins:
-      - exact: https://example.com
+      - type: Exact
+        value: https://example.com

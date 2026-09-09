@@ -21,6 +21,7 @@ bash scripts/verify-access.sh longhorn.apps.YOUR_DOMAIN local/platform-ca.crt
 | Logged-in user without FGA tuple | 403 |
 | User with exact service-access tuple | Dashboard available |
 | Wrong JWT issuer, audience, signature or expired token | Denied |
+| Authorized request observed by backend | Authorization is `GatewayAuthenticated`, not a bearer token; X-Astra-Subject is the verified subject |
 | Remove the user's FGA tuple | New dashboard request denied |
 | New application hostname without callback registration | Login cannot complete; no bypass |
 | New hostname with callback but without a tuple | Denied |
