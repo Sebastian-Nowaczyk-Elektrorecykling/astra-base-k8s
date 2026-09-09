@@ -1,0 +1,17 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: app-db
+  namespace: app-demo
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.11-standard-trixie
+  storage:
+    size: 10Gi
+  bootstrap:
+    initdb:
+      database: app
+      owner: app
+  affinity:
+    nodeSelector:
+      astra.local/workloads: 'true'

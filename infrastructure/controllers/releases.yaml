@@ -1,0 +1,186 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: longhorn
+  namespace: longhorn-system
+spec:
+  interval: 30m
+  timeout: 15m
+  releaseName: longhorn
+  chart:
+    spec:
+      chart: longhorn
+      version: 1.12.1
+      sourceRef:
+        kind: HelmRepository
+        name: longhorn
+        namespace: flux-system
+      interval: 1h
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    persistence:
+      defaultClass: false
+      defaultClassReplicaCount: 1
+      createStorageClass: false
+    defaultSettings:
+      defaultDataPath: /var/lib/longhorn
+      createDefaultDiskLabeledNodes: true
+      defaultReplicaCount: '{"v1":"1","v2":"1"}'
+      replicaSoftAntiAffinity: false
+      storageOverProvisioningPercentage: 100
+      storageMinimalAvailablePercentage: 15
+      systemManagedComponentsNodeSelector: astra.local/workloads:true
+    longhornManager:
+      nodeSelector:
+        astra.local/workloads: 'true'
+    longhornDriver:
+      nodeSelector:
+        astra.local/workloads: 'true'
+    longhornUI:
+      replicas: 1
+      nodeSelector:
+        astra.local/workloads: 'true'
+    ingress:
+      enabled: false
+    csi:
+      kubeletRootDir: /var/lib/kubelet
+      attacherReplicaCount: 1
+      provisionerReplicaCount: 1
+      resizerReplicaCount: 1
+      snapshotterReplicaCount: 1
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cloudnative-pg
+  namespace: cnpg-system
+spec:
+  interval: 30m
+  timeout: 15m
+  releaseName: cloudnative-pg
+  chart:
+    spec:
+      chart: cloudnative-pg
+      version: 0.29.0
+      sourceRef:
+        kind: HelmRepository
+        name: cnpg
+        namespace: flux-system
+      interval: 1h
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 1
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cert-manager
+  namespace: cert-manager
+spec:
+  interval: 30m
+  timeout: 15m
+  releaseName: cert-manager
+  chart:
+    spec:
+      chart: cert-manager
+      version: v1.21.1
+      sourceRef:
+        kind: HelmRepository
+        name: cert-manager
+        namespace: flux-system
+      interval: 1h
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    crds:
+      enabled: true
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kyverno
+  namespace: kyverno
+spec:
+  interval: 30m
+  timeout: 15m
+  releaseName: kyverno
+  chart:
+    spec:
+      chart: kyverno
+      version: 3.9.0
+      sourceRef:
+        kind: HelmRepository
+        name: kyverno
+        namespace: flux-system
+      interval: 1h
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    admissionController:
+      replicas: 1
+    backgroundController:
+      replicas: 1
+    cleanupController:
+      enabled: false
+    reportsController:
+      enabled: false
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: envoy-gateway
+  namespace: envoy-gateway-system
+spec:
+  interval: 30m
+  timeout: 15m
+  releaseName: envoy-gateway
+  chart:
+    spec:
+      chart: gateway-helm
+      version: v1.9.1
+      sourceRef:
+        kind: HelmRepository
+        name: envoy-gateway
+        namespace: flux-system
+      interval: 1h
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    deployment:
+      replicas: 1
+    config:
+      envoyGateway:
+        extensionApis:
+          enableEnvoyPatchPolicy: false

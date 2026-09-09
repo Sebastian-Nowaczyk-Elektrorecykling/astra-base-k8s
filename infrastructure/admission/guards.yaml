@@ -1,0 +1,313 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: astra-services
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - services
+  validations:
+  - expression: '!has(object.spec.externalIPs) || size(object.spec.externalIPs) == 0'
+    message: External IPs bypass the protected gateway.
+  - expression: '!has(object.spec.type) || object.spec.type != ''NodePort'''
+    message: NodePort services bypass the protected gateway.
+  - expression: '!has(object.spec.type) || object.spec.type != ''LoadBalancer'' || (object.metadata.namespace ==
+      ''envoy-gateway-system'' && has(object.metadata.labels) && ''gateway.envoyproxy.io/owning-gateway-name'' in
+      object.metadata.labels && object.metadata.labels[''gateway.envoyproxy.io/owning-gateway-name''] == ''platform'')'
+    message: Only the managed platform Envoy service may obtain a load balancer.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: astra-services
+spec:
+  policyName: astra-services
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: astra-http-routes
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - gateway.networking.k8s.io
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - httproutes
+  validations:
+  - expression: object.metadata.namespace == "edge"
+    message: HTTPRoutes are managed centrally in edge.
+  - expression: has(object.spec.parentRefs) && size(object.spec.parentRefs) == 1 && object.spec.parentRefs[0].name
+      == "platform" && (!has(object.spec.parentRefs[0].namespace) || object.spec.parentRefs[0].namespace == "edge")
+    message: Routes must attach to the platform gateway.
+  - expression: has(object.spec.hostnames) && size(object.spec.hostnames) > 0
+    message: Routes require explicit hosts.
+  - expression: '(object.spec.parentRefs[0].sectionName == ''apps'' && object.spec.hostnames.all(h, h.endsWith(''.apps.${BASE_DOMAIN}'')))
+      ||
+
+      (object.metadata.name == ''keycloak'' && object.spec.parentRefs[0].sectionName == ''identity'' && object.spec.hostnames
+      == [''id.${BASE_DOMAIN}''] && size(object.spec.rules) == 1 && !has(object.spec.rules[0].filters) && size(object.spec.rules[0].backendRefs)
+      == 1 && object.spec.rules[0].backendRefs[0].name == ''keycloak'' && object.spec.rules[0].backendRefs[0].namespace
+      == ''identity'' && object.spec.rules[0].backendRefs[0].port == 8080)'
+    message: Only Keycloak may use the native identity listener; applications use the protected apps listener.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: astra-http-routes
+spec:
+  policyName: astra-http-routes
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: astra-no-alternate-routes
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - networking.k8s.io
+      apiVersions:
+      - '*'
+      operations: &id001
+      - CREATE
+      - UPDATE
+      resources:
+      - ingresses
+    - apiGroups:
+      - gateway.networking.k8s.io
+      apiVersions:
+      - '*'
+      operations: *id001
+      resources:
+      - grpcroutes
+      - tcproutes
+      - tlsroutes
+      - udproutes
+      - listenersets
+    - apiGroups:
+      - gateway.envoyproxy.io
+      apiVersions:
+      - '*'
+      operations: *id001
+      resources:
+      - envoypatchpolicies
+      - envoyextensionpolicies
+    - apiGroups:
+      - gateway.networking.x-k8s.io
+      apiVersions:
+      - '*'
+      operations: *id001
+      resources:
+      - xlistenersets
+  validations:
+  - expression: 'false'
+    message: Alternate routes and proxy extensions require a reviewed platform design change.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: astra-no-alternate-routes
+spec:
+  policyName: astra-no-alternate-routes
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: astra-access-policy
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - gateway.envoyproxy.io
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      - DELETE
+      resources:
+      - securitypolicies
+  validations:
+  - expression: request.operation != "DELETE"
+    message: Delete the Gateway before deliberately retiring this policy; change this guard through reviewed Git
+      first.
+  - expression: request.operation == "DELETE" || (object.metadata.namespace == "edge" && object.metadata.name ==
+      "protected-access")
+    message: Route-specific security overrides are forbidden.
+  - expression: request.operation == 'DELETE' || (has(object.spec.oidc) && has(object.spec.jwt) && has(object.spec.extAuth)
+      && has(object.spec.extAuth.failOpen) && !object.spec.extAuth.failOpen && has(object.spec.extAuth.grpc) &&
+      object.spec.extAuth.grpc.backendRefs.size() == 1 && object.spec.extAuth.grpc.backendRefs[0].name == 'authorino'
+      && object.spec.extAuth.grpc.backendRefs[0].namespace == 'authorization' && object.spec.extAuth.grpc.backendRefs[0].port
+      == 50051 && object.spec.targetRefs.size() == 1 && object.spec.targetRefs[0].name == 'platform' && object.spec.targetRefs[0].kind
+      == 'Gateway' && object.spec.targetRefs[0].sectionName == 'apps')
+    message: Browser login, JWT validation and fail-closed Authorino must protect the apps listener.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: astra-access-policy
+spec:
+  policyName: astra-access-policy
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: astra-gateways
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - gateway.networking.k8s.io
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - gateways
+  validations:
+  - expression: object.metadata.namespace == "edge" && object.metadata.name == "platform" && object.spec.gatewayClassName
+      == "platform"
+    message: Only the managed platform Gateway is allowed.
+  - expression: object.spec.listeners.size() == 2 && object.spec.listeners.all(l, l.port == 443 && l.protocol ==
+      'HTTPS' && l.tls.mode == 'Terminate' && l.allowedRoutes.namespaces.from == 'Same') && object.spec.listeners.exists(l,
+      l.name == 'apps' && l.hostname == '*.apps.${BASE_DOMAIN}') && object.spec.listeners.exists(l, l.name == 'identity'
+      && l.hostname == 'id.${BASE_DOMAIN}')
+    message: Only the TLS apps and identity listeners with same-namespace routes are allowed.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: astra-gateways
+spec:
+  policyName: astra-gateways
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: astra-gateway-class
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - gateway.networking.k8s.io
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - gatewayclasses
+  validations:
+  - expression: object.metadata.name == 'platform' && object.spec.controllerName == 'gateway.envoyproxy.io/gatewayclass-controller'
+    message: Only the platform GatewayClass is allowed.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: astra-gateway-class
+spec:
+  policyName: astra-gateway-class
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: astra-envoy-proxy
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - gateway.envoyproxy.io
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - envoyproxies
+  validations:
+  - expression: object.metadata.namespace == 'edge' && object.metadata.name == 'platform'
+    message: Only the managed platform EnvoyProxy is allowed.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: astra-envoy-proxy
+spec:
+  policyName: astra-envoy-proxy
+  validationActions:
+  - Deny
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: astra-workload-pods
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - ''
+      apiVersions:
+      - '*'
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - pods
+  validations:
+  - expression: (!has(object.spec.hostNetwork) || !object.spec.hostNetwork) && (!has(object.spec.hostPID) || !object.spec.hostPID)
+      && (!has(object.spec.hostIPC) || !object.spec.hostIPC)
+    message: Workloads cannot use host namespaces.
+  - expression: object.spec.containers.all(c, (!has(c.ports) || c.ports.all(p, !has(p.hostPort) || p.hostPort ==
+      0)) && (!has(c.securityContext) || !has(c.securityContext.privileged) || !c.securityContext.privileged))
+    message: Workloads cannot use host ports or privileged containers.
+  - expression: '!has(object.spec.volumes) || object.spec.volumes.all(v, !has(v.hostPath))'
+    message: Workloads cannot mount the host filesystem.
+  matchConditions:
+  - name: condition-0
+    expression: '!(request.namespace in ["kube-system", "kube-public", "kube-node-lease", "flux-system", "longhorn-system",
+      "cnpg-system", "cert-manager", "kyverno", "envoy-gateway-system", "gpu-system", "identity", "authorization",
+      "edge"])'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: astra-workload-pods
+spec:
+  policyName: astra-workload-pods
+  validationActions:
+  - Deny

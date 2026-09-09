@@ -1,0 +1,71 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openfga
+  namespace: authorization
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: openfga
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: authorization
+        app: authorino
+    toPorts:
+    - ports:
+      - port: '8080'
+        protocol: TCP
+      rules:
+        http:
+        - method: POST
+          path: /stores/[A-Za-z0-9]+/check
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: authorino
+  namespace: authorization
+spec:
+  endpointSelector:
+    matchLabels:
+      app: authorino
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: envoy-gateway-system
+    toPorts:
+    - ports:
+      - port: '50051'
+        protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openfga-db
+  namespace: authorization
+spec:
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: openfga-db
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: authorization
+        cnpg.io/cluster: openfga-db
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: authorization
+        app.kubernetes.io/name: openfga
+    toPorts:
+    - ports:
+      - port: '5432'
+        protocol: TCP
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: cnpg-system
+    toPorts:
+    - ports:
+      - port: '8000'
+        protocol: TCP
+      - port: '5432'
+        protocol: TCP

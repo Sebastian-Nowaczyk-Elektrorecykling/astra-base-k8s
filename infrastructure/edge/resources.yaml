@@ -1,0 +1,66 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: platform
+  namespace: edge
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        replicas: 1
+      envoyService:
+        annotations:
+          lbipam.cilium.io/ips: ${EDGE_IP}
+        externalTrafficPolicy: Cluster
+        allocateLoadBalancerNodePorts: false
+  filterOrder:
+  - name: envoy.filters.http.oauth2
+    before: envoy.filters.http.jwt_authn
+  - name: envoy.filters.http.ext_authz
+    after: envoy.filters.http.jwt_authn
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: platform
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: platform
+    namespace: edge
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: platform
+  namespace: edge
+spec:
+  gatewayClassName: platform
+  listeners:
+  - name: identity
+    hostname: id.${BASE_DOMAIN}
+    port: 443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: edge-tls
+    allowedRoutes:
+      namespaces:
+        from: Same
+  - name: apps
+    hostname: '*.apps.${BASE_DOMAIN}'
+    port: 443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: edge-tls
+    allowedRoutes:
+      namespaces:
+        from: Same

@@ -1,0 +1,28 @@
+kubeProxyReplacement: true
+ipam:
+  mode: kubernetes
+k8sServicePort: 6443
+routingMode: tunnel
+tunnelProtocol: vxlan
+operator:
+  replicas: 1
+l2announcements:
+  enabled: true
+k8sClientRateLimit:
+  qps: 40
+  burst: 80
+gatewayAPI:
+  enabled: false
+ingressController:
+  enabled: false
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: false
+securityContext:
+  privileged: true
+encryption:
+  enabled: true
+  type: wireguard

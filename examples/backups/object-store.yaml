@@ -1,0 +1,21 @@
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: pg-backups
+  namespace: identity
+spec:
+  configuration:
+    destinationPath: s3://YOUR_OFF_CLUSTER_BUCKET/keycloak
+    endpointURL: https://YOUR_S3_ENDPOINT
+    s3Credentials:
+      accessKeyId:
+        name: pg-backup-credentials
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: pg-backup-credentials
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 30d

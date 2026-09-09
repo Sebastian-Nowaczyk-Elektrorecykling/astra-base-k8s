@@ -1,0 +1,29 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: envoy-no-nodeports
+spec:
+  background: false
+  webhookConfiguration:
+    failurePolicy: Fail
+  rules:
+  - name: no-allocated-nodeports
+    match:
+      any:
+      - resources:
+          kinds:
+          - Service
+          namespaces:
+          - envoy-gateway-system
+          operations:
+          - CREATE
+          - UPDATE
+    preconditions:
+      all:
+      - key: '{{ request.object.spec.type || ''ClusterIP'' }}'
+        operator: Equals
+        value: LoadBalancer
+    mutate:
+      patchStrategicMerge:
+        spec:
+          allocateLoadBalancerNodePorts: false

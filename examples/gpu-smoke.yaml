@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gpu-smoke
+  namespace: gpu-system
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      runtimeClassName: nvidia
+      nodeSelector:
+        astra.local/gpu-vendor: nvidia
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: nvidia-smi
+        image: nvidia/cuda:12.2.2-base-ubuntu22.04
+        command:
+        - nvidia-smi
+        resources:
+          limits:
+            nvidia.com/gpu: 1

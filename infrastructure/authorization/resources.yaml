@@ -1,0 +1,207 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openfga
+  namespace: authorization
+spec:
+  interval: 30m
+  timeout: 15m
+  releaseName: openfga
+  chart:
+    spec:
+      chart: openfga
+      version: 0.3.14
+      sourceRef:
+        kind: HelmRepository
+        name: openfga
+        namespace: flux-system
+      interval: 1h
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    replicaCount: 1
+    image:
+      tag: v1.20.0
+      pullPolicy: IfNotPresent
+    datastore:
+      engine: postgres
+      migrationType: initContainer
+      applyMigrations: true
+      waitForMigrations: true
+      uri: postgres://openfga-db-rw.authorization.svc.cluster.local:5432/openfga?sslmode=verify-full&sslrootcert=/etc/postgres-ca/ca.crt
+      existingSecret: openfga-db-app
+      secretKeys:
+        usernameKey: username
+        passwordKey: password
+    authn:
+      method: preshared
+      preshared:
+        keysSecret: openfga-key
+    playground:
+      enabled: false
+    postgresql:
+      enabled: false
+    mysql:
+      enabled: false
+    ingress:
+      enabled: false
+    nodeSelector:
+      astra.local/workloads: 'true'
+    checkQueryCache:
+      enabled: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+    extraVolumes:
+    - name: pg-ca
+      secret:
+        secretName: openfga-db-ca
+        items:
+        - key: ca.crt
+          path: ca.crt
+    extraVolumeMounts:
+    - name: pg-ca
+      mountPath: /etc/postgres-ca
+      readOnly: true
+    migrate:
+      extraVolumeMounts:
+      - name: pg-ca
+        mountPath: /etc/postgres-ca
+        readOnly: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: authorino
+  namespace: authorization
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: authorino
+  namespace: authorization
+rules:
+- apiGroups:
+  - authorino.kuadrant.io
+  resources:
+  - authconfigs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - authorino.kuadrant.io
+  resources:
+  - authconfigs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ''
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: authorino
+  namespace: authorization
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: authorino
+subjects:
+- kind: ServiceAccount
+  name: authorino
+  namespace: authorization
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authorino
+  namespace: authorization
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: authorino
+  template:
+    metadata:
+      labels:
+        app: authorino
+    spec:
+      serviceAccountName: authorino
+      containers:
+      - name: authorino
+        image: quay.io/kuadrant/authorino:v0.26.3
+        args:
+        - server
+        - --watch-namespace=authorization
+        - --ext-auth-http-port=0
+        - --oidc-http-port=0
+        - --timeout=3000
+        ports:
+        - name: grpc
+          containerPort: 50051
+        - name: health
+          containerPort: 8081
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: health
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: health
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authorino
+  namespace: authorization
+spec:
+  selector:
+    app: authorino
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: grpc
+    appProtocol: kubernetes.io/h2c

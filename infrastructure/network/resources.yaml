@@ -1,0 +1,70 @@
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: lan
+spec:
+  blocks:
+  - start: ${LB_START}
+    stop: ${LB_STOP}
+  serviceSelector:
+    matchLabels:
+      gateway.envoyproxy.io/owning-gateway-name: platform
+---
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: lan
+spec:
+  serviceSelector:
+    matchLabels:
+      gateway.envoyproxy.io/owning-gateway-name: platform
+  interfaces:
+  - ${LAN_INTERFACE_REGEX}
+  externalIPs: false
+  loadBalancerIPs: true
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: application-ingress
+spec:
+  endpointSelector:
+    matchExpressions:
+    - key: k8s:io.kubernetes.pod.namespace
+      operator: NotIn
+      values:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - flux-system
+      - longhorn-system
+      - cnpg-system
+      - cert-manager
+      - kyverno
+      - envoy-gateway-system
+      - gpu-system
+      - identity
+      - authorization
+      - edge
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: envoy-gateway-system
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-ui
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: longhorn-ui
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: envoy-gateway-system
+    toPorts:
+    - ports:
+      - port: '8000'
+        protocol: TCP

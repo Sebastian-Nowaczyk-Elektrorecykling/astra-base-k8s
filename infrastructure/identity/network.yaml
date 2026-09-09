@@ -1,0 +1,60 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keycloak
+  namespace: identity
+spec:
+  endpointSelector:
+    matchLabels:
+      app: keycloak
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: envoy-gateway-system
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: authorization
+        app: authorino
+    toPorts:
+    - ports:
+      - port: '8080'
+        protocol: TCP
+  - fromEndpoints:
+    - matchLabels:
+        app: keycloak
+    toPorts:
+    - ports:
+      - port: '7800'
+        protocol: TCP
+      - port: '57800'
+        protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: keycloak-db
+  namespace: identity
+spec:
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: keycloak-db
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: identity
+        cnpg.io/cluster: keycloak-db
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: identity
+        app: keycloak
+    toPorts:
+    - ports:
+      - port: '5432'
+        protocol: TCP
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: cnpg-system
+    toPorts:
+    - ports:
+      - port: '8000'
+        protocol: TCP
+      - port: '5432'
+        protocol: TCP

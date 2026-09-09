@@ -1,0 +1,9 @@
+local/
+.tools/
+.cache/
+rendered/
+*.agekey
+*.key
+kubeconfig*
+*.dec.yaml
+!examples/secrets.example.yaml

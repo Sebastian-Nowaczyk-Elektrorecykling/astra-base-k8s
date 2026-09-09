@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "principal"
+    },
+    {
+      "type": "group",
+      "relations": {
+        "member": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "member": {
+            "directly_related_user_types": [
+              {
+                "type": "principal"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "service",
+      "relations": {
+        "access": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "access": {
+            "directly_related_user_types": [
+              {
+                "type": "principal"
+              },
+              {
+                "type": "group",
+                "relation": "member"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

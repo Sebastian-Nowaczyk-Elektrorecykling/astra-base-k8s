@@ -1,0 +1,55 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn
+  annotations:
+    storageclass.kubernetes.io/is-default-class: 'true'
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: '1'
+  staleReplicaTimeout: '30'
+  fsType: ext4
+  dataLocality: disabled
+  dataEngine: v1
+  replicaAutoBalance: best-effort
+  replicaSoftAntiAffinity: disabled
+  replicaDiskSoftAntiAffinity: disabled
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-3
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: '3'
+  staleReplicaTimeout: '30'
+  fsType: ext4
+  dataLocality: disabled
+  dataEngine: v1
+  replicaAutoBalance: best-effort
+  replicaSoftAntiAffinity: disabled
+  replicaDiskSoftAntiAffinity: disabled
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-cnpg
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: '1'
+  staleReplicaTimeout: '30'
+  fsType: ext4
+  dataLocality: best-effort
+  dataEngine: v1
+  replicaAutoBalance: best-effort
+  replicaSoftAntiAffinity: disabled
+  replicaDiskSoftAntiAffinity: disabled

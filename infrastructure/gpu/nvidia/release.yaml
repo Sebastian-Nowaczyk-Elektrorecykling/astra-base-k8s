@@ -1,0 +1,42 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: nvidia-device-plugin
+  namespace: gpu-system
+spec:
+  interval: 30m
+  timeout: 15m
+  releaseName: nvidia-device-plugin
+  chart:
+    spec:
+      chart: nvidia-device-plugin
+      version: 0.19.2
+      sourceRef:
+        kind: HelmRepository
+        name: nvidia
+        namespace: flux-system
+      interval: 1h
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    runtimeClassName: nvidia
+    nodeSelector:
+      astra.local/gpu-vendor: nvidia
+    gfd:
+      enabled: false
+    nfd:
+      enabled: false
+    failOnInitError: true
+    migStrategy: none
+    deviceListStrategy: envvar
+    tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+    affinity: {}

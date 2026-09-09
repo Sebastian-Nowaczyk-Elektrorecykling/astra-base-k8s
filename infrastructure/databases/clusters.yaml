@@ -1,0 +1,61 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: keycloak-db
+  namespace: identity
+spec:
+  instances: 1
+  imageName: ${PG_IMAGE}
+  enableSuperuserAccess: false
+  storage:
+    size: 10Gi
+  bootstrap:
+    initdb:
+      database: keycloak
+      owner: keycloak
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  affinity:
+    nodeSelector:
+      astra.local/workloads: 'true'
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+  postgresql:
+    parameters:
+      max_connections: '100'
+      shared_buffers: 128MB
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: openfga-db
+  namespace: authorization
+spec:
+  instances: 1
+  imageName: ${PG_IMAGE}
+  enableSuperuserAccess: false
+  storage:
+    size: 10Gi
+  bootstrap:
+    initdb:
+      database: openfga
+      owner: openfga
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  affinity:
+    nodeSelector:
+      astra.local/workloads: 'true'
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+  postgresql:
+    parameters:
+      max_connections: '100'
+      shared_buffers: 128MB

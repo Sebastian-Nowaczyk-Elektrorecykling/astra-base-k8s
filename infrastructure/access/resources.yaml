@@ -1,0 +1,112 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: protected-access
+  namespace: edge
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: platform
+    sectionName: apps
+  oidc:
+    provider:
+      issuer: https://id.${BASE_DOMAIN}/realms/astra
+      authorizationEndpoint: https://id.${BASE_DOMAIN}/realms/astra/protocol/openid-connect/auth
+      tokenEndpoint: http://keycloak.identity.svc.cluster.local:8080/realms/astra/protocol/openid-connect/token
+    clientID: astra-edge
+    clientSecret:
+      name: edge-oidc
+    scopes:
+    - openid
+    - profile
+    - email
+    forwardAccessToken: true
+    passThroughAuthHeader: true
+    refreshToken: true
+    cookieConfig:
+      sameSite: Lax
+  jwt:
+    providers:
+    - name: keycloak
+      issuer: https://id.${BASE_DOMAIN}/realms/astra
+      audiences:
+      - astra-edge
+      remoteJWKS:
+        uri: http://keycloak.identity.svc.cluster.local:8080/realms/astra/protocol/openid-connect/certs
+  extAuth:
+    grpc:
+      backendRefs:
+      - name: authorino
+        namespace: authorization
+        port: 50051
+    failOpen: false
+    timeout: 4s
+---
+apiVersion: authorino.kuadrant.io/v1beta3
+kind: AuthConfig
+metadata:
+  name: protected-apps
+  namespace: authorization
+spec:
+  hosts:
+  - '*.apps.${BASE_DOMAIN}'
+  authentication:
+    keycloak:
+      jwt:
+        jwksUrl: http://keycloak.identity.svc.cluster.local:8080/realms/astra/protocol/openid-connect/certs
+  metadata:
+    fga:
+      http:
+        url: http://openfga.authorization.svc.cluster.local:8080/stores/${FGA_STORE_ID}/check
+        method: POST
+        contentType: application/json
+        sharedSecretRef:
+          name: openfga-key
+          key: keys
+        bodyParameters:
+          authorization_model_id:
+            value: ${FGA_MODEL_ID}
+          consistency:
+            value: HIGHER_CONSISTENCY
+          tuple_key:
+            expression: '{"user": "principal:" + auth.identity.sub, "relation": "access", "object": "service:" +
+              request.host.split(":")[0].lowerAscii()}'
+  authorization:
+    issuer:
+      patternMatching:
+        patterns:
+        - selector: auth.identity.iss
+          operator: eq
+          value: https://id.${BASE_DOMAIN}/realms/astra
+    fga-allow:
+      patternMatching:
+        patterns:
+        - predicate: auth.metadata.fga.allowed == true
+    audience:
+      patternMatching:
+        patterns:
+        - any:
+          - selector: auth.identity.aud
+            operator: eq
+            value: astra-edge
+          - selector: auth.identity.aud
+            operator: incl
+            value: astra-edge
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: edge-authorino
+  namespace: authorization
+spec:
+  from:
+  - group: gateway.envoyproxy.io
+    kind: SecurityPolicy
+    namespace: edge
+  to:
+  - group: ''
+    kind: Service
+    name: authorino
