@@ -293,6 +293,7 @@ spec:
       - UPDATE
       resources:
       - pods
+      - pods/ephemeralcontainers
   validations:
   - expression: (!has(object.spec.hostNetwork) || !object.spec.hostNetwork) && (!has(object.spec.hostPID) || !object.spec.hostPID)
       && (!has(object.spec.hostIPC) || !object.spec.hostIPC)
@@ -302,6 +303,14 @@ spec:
     message: Workloads cannot use host ports or privileged containers.
   - expression: '!has(object.spec.volumes) || object.spec.volumes.all(v, !has(v.hostPath))'
     message: Workloads cannot mount the host filesystem.
+  - expression: '!has(object.spec.initContainers) || object.spec.initContainers.all(c, (!has(c.ports) || c.ports.all(p,
+      !has(p.hostPort) || p.hostPort == 0)) && (!has(c.securityContext) || !has(c.securityContext.privileged) ||
+      !c.securityContext.privileged))'
+    message: Init/debug containers cannot use host ports or privilege.
+  - expression: '!has(object.spec.ephemeralContainers) || object.spec.ephemeralContainers.all(c, (!has(c.ports)
+      || c.ports.all(p, !has(p.hostPort) || p.hostPort == 0)) && (!has(c.securityContext) || !has(c.securityContext.privileged)
+      || !c.securityContext.privileged))'
+    message: Init/debug containers cannot use host ports or privilege.
   matchConditions:
   - name: condition-0
     expression: '!(request.namespace in ["kube-system", "kube-public", "kube-node-lease", "flux-system", "longhorn-system",

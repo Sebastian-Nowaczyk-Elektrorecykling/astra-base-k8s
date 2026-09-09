@@ -50,4 +50,5 @@ reject() {
 reject 'NodePort services bypass' kubectl create service nodeport bypass --tcp=80:80 -n default --dry-run=server
 reject 'Route-specific security overrides' kubectl apply --dry-run=server -f tests/fixtures/route-override.yaml
 reject 'Only Keycloak may use' kubectl apply --dry-run=server -f tests/fixtures/native-bypass.yaml
+reject 'Init/debug containers cannot' kubectl apply --dry-run=server -f tests/fixtures/privileged-init.yaml
 echo 'Server-side schemas, CNPG default mutation and negative admission cases passed.'

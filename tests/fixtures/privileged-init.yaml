@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-init
+  namespace: default
+spec:
+  initContainers:
+    - name: bypass
+      image: busybox:1.37.0
+      command: ["true"]
+      securityContext:
+        privileged: true
+  containers:
+    - name: app
+      image: busybox:1.37.0
+      command: ["sleep", "60"]
