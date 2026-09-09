@@ -68,3 +68,19 @@ spec:
     - ports:
       - port: '8000'
         protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: longhorn-internal
+  namespace: longhorn-system
+spec:
+  endpointSelector: {}
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: longhorn-system
+  - fromEntities:
+    - host
+    - remote-node
+    - kube-apiserver

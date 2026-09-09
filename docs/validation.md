@@ -24,7 +24,7 @@ bash scripts/verify-access.sh longhorn.apps.YOUR_DOMAIN local/platform-ca.crt
 | Remove the user's FGA tuple | New dashboard request denied |
 | New application hostname without callback registration | Login cannot complete; no bypass |
 | New hostname with callback but without a tuple | Denied |
-| Direct pod/ClusterIP access from ordinary application namespace | Denied by Cilium |
+| Direct pod/ClusterIP access, including Longhorn backend API, from ordinary application namespace | Denied by Cilium |
 | New NodePort, extra LoadBalancer, externalIPs, raw Ingress or alternate route | Admission rejected |
 | Route-level SecurityPolicy override or reusing identity listener for Longhorn | Admission rejected |
 

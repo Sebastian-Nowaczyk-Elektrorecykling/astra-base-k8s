@@ -119,6 +119,10 @@ def render():
         write(ROOT / "rendered/charts" / (name + ".yaml"), objs)
         chart_objects.extend(objs)
         print(f"Rendered {name}: chart {chart['version']}")
+    # Confirm explicit standalone image tags exist without running application containers.
+    for image in sorted({settings["PG_IMAGE"], "quay.io/keycloak/keycloak:26.7.3", "quay.io/kuadrant/authorino:v0.26.3"}):
+        run("docker", "manifest", "inspect", image)
+        print(f"Verified image manifest: {image}")
     # CRDs embedded in the Cilium binary and the standalone Authorino distribution.
     extra_urls = ["https://github.com/fluxcd/flux2/releases/download/v2.9.5/install.yaml",
                   "https://raw.githubusercontent.com/Kuadrant/authorino/v0.26.3/install/crd/authorino.kuadrant.io_authconfigs.yaml"]

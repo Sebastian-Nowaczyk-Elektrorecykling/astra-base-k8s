@@ -3,7 +3,7 @@ set -euo pipefail
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 # shellcheck source=../bootstrap/versions.env
 source "$repo/bootstrap/versions.env"
-role= node_name= node_ip= config= server= token_file= init=false
+role='' node_name='' node_ip='' config='' server='' token_file='' init=false
 usage() {
   echo 'Usage: install-k3s.sh --role controller|hybrid|worker --name NAME --ip IPv4 --config FILE (--init | --server https://HOST:6443 --token-file FILE)'
 }
