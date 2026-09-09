@@ -39,4 +39,12 @@ spec:
     - key: nvidia.com/gpu
       operator: Exists
       effect: NoSchedule
-    affinity: {}
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: astra.local/gpu-vendor
+              operator: In
+              values:
+              - nvidia

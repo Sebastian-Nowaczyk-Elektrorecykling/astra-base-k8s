@@ -112,7 +112,7 @@ def render():
         args += ["--version", chart["version"], "--untar", "--untardir", str(target)]
         run(*args)
         chart_path = target / chart["chart"]
-        run("helm", "lint", str(chart_path), "--values", str(value_path), "--kube-version", "1.36.4")
+        run("helm", "lint", str(chart_path), "--values", str(value_path), "--namespace", hr["metadata"]["namespace"], "--kube-version", "1.36.4")
         text = run("helm", "template", name, str(chart_path), "--namespace", hr["metadata"]["namespace"],
                    "--values", str(value_path), "--kube-version", "1.36.4", "--include-crds")
         objs = [d for d in yaml.safe_load_all(text) if d]
