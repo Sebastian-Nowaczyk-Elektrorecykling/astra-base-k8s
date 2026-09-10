@@ -9,6 +9,15 @@ source "$1"
 : "${API_HOST:?}"
 command -v helm >/dev/null
 command -v kubectl >/dev/null
+# Persist the address before the first Helm install so Flux adopts the same endpoint.
+bash "$repo/scripts/configure-cluster.sh" "$1"
+# Once Flux owns the release, use reconciliation/recovery instead of racing its Helm controller.
+if [[ -n $(kubectl get crd helmreleases.helm.toolkit.fluxcd.io --ignore-not-found -o name) ]]; then
+  if [[ -n $(kubectl -n kube-system get helmrelease cilium --ignore-not-found -o name) ]]; then
+    echo 'Flux already manages Cilium. Commit the settings change and follow docs/cilium-api-recovery.md.' >&2
+    exit 1
+  fi
+fi
 helm repo add cilium https://helm.cilium.io/ --force-update
 helm repo update cilium
 # Same release name, namespace, values and pin as Flux: Flux takes over this release.

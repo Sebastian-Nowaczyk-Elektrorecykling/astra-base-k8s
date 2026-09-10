@@ -18,7 +18,7 @@ Reserve, for example:
 
 Change `clusters/laptops/settings.yaml`. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Set up DNS on a resolver your laptops **and client machines** use. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. For routed networks use Cilium BGP instead, as a reviewed replacement of the L2 policy.
 
-Copy `bootstrap/cluster.env.example` to `local/cluster.env` on each host. Its API address and CIDRs must match the GitOps settings. All servers must receive identical critical k3s options. CIDRs must not overlap LAN/VPN networks. Do not change them on a running cluster.
+Copy `bootstrap/cluster.env.example` to `local/cluster.env` on each host and the administrator workstation. Set the reachable API address there. `bootstrap-cilium.sh` copies `API_HOST` and `POD_CIDR` into `clusters/laptops/settings.yaml` before installing Cilium. All servers must receive identical critical k3s options. CIDRs must not overlap LAN/VPN networks. Do not change them on a running cluster.
 
 Prepare the administrator workstation from a checkout of this repository:
 
@@ -81,6 +81,10 @@ kubectl get nodes -o wide
 
 The normal Helm release is installed once to solve the CNI/bootstrap dependency. Flux later reconciles that same release, namespace, version and shared values file. There is no k3s HelmChart resource racing Flux. Do not re-enable Flannel, kube-proxy, Traefik, ServiceLB or local-path storage.
 
+Review the settings file updated by this step and include it in the commit below. Flux cannot read your ignored `local/cluster.env`: it uses `API_HOST` from the tracked settings ConfigMap. For later address changes, run `bash scripts/configure-cluster.sh local/cluster.env`, then commit and push the resulting settings change. The helper only copies the shared API address and pod CIDR; configure your domain, load-balancer addresses and other platform values in `settings.yaml`.
+
+If Flux already manages Cilium, the bootstrap script stops before running Helm against that managed release. Use [Cilium API-address recovery](cilium-api-recovery.md) if pods are already connecting to the wrong server.
+
 ## 4. Encrypt secrets and bootstrap Flux
 
 From your workstation checkout with the real settings:
@@ -101,6 +105,8 @@ git pull --ff-only
 ```
 
 The GitHub token bootstraps Flux's read-only SSH deploy key; the token is not stored in the cluster. Back up the age private key offline. `sops-age` must be restored before Flux can recover encrypted resources. The cluster's `.sops.yaml` can be added with your public recipient if you want convenient `sops` edits. Never commit decrypted copies.
+
+Before making cluster changes, `bootstrap-flux.sh` verifies that `API_HOST` and `POD_CIDR` agree with `local/cluster.env` and that the committed cluster configuration matches `origin/main`. This prevents Flux from replacing the working Cilium API address with an old Git value. If your local config has a different path, pass it as the second argument: `bash scripts/bootstrap-flux.sh local/age.agekey /path/to/cluster.env`.
 
 The checked-in `flux-system/kustomization.yaml` references both `gotk-components.yaml` and `gotk-sync.yaml`. The latter starts as a comment-only placeholder, then Flux writes the real GitRepository and Kustomization during bootstrap. Flux preserves an existing Kustomization's resource list: leaving it empty causes `no Kubernetes objects found` even after the controllers' YAML has been generated. This layout follows [Flux's bootstrap customization procedure](https://fluxcd.io/flux/installation/configuration/bootstrap-customization/).
 

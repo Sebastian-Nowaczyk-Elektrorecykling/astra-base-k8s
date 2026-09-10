@@ -8,6 +8,8 @@ The GitHub Actions workflow also pulls and lints the actual pinned Helm charts, 
 
 Separate fresh Debian 12 and 13 amd64 containers run the actual `prepare-workstation.sh` installer. They check installed CLI versions, perform an age/SOPS encryption/decryption round trip, and build the Flux manifests twice: once with generated controllers and an empty sync placeholder, then with generated GitRepository/Kustomization objects. These regress the reported empty-bootstrap failure without using a GitHub token or contacting a Kubernetes cluster. The installer also supports the upstream arm64 binaries; these CI jobs exercise amd64.
 
+The Debian jobs also exercise `configure-cluster.sh` with a nondefault API IP and a DNS name. They verify mismatch rejection, propagation into GitOps settings, preservation of unrelated configuration and repeatable execution. Chart validation checks the rendered API host/port in the Cilium agent, operator and API-dependent init containers.
+
 These checks do not exercise physical Debian installation, Cilium's real LAN/ARP/WireGuard behavior, Longhorn iSCSI and disk recovery, browser sessions, Google credentials, GPU drivers, or a complete production cluster. Complete the following acceptance checks on your hardware before relying on the foundation.
 
 ## Access checks

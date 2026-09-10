@@ -25,6 +25,8 @@ jobs:
         run: bash scripts/prepare-workstation.sh
       - name: Exercise CLI tools and Flux bootstrap manifests
         run: bash tests/workstation.sh
+      - name: Verify bootstrap and GitOps address handoff
+        run: bash tests/cluster-config.sh
   manifests:
     runs-on: ubuntu-24.04
     timeout-minutes: 25

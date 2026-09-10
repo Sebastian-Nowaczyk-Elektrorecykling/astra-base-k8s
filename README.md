@@ -26,6 +26,8 @@ On a fresh Debian administrator workstation, run `sudo bash scripts/prepare-work
 
 If an earlier bootstrap failed with `no Kubernetes objects found`, follow [the recovery and node-label update](docs/rename-elektro.md) before retrying.
 
+If Cilium is contacting an old API address, follow [API-address recovery](docs/cilium-api-recovery.md). Flux reads the tracked settings, so a change only in `local/cluster.env` must be copied with `scripts/configure-cluster.sh` and committed.
+
 ```sh
 # On each freshly installed Debian host, from this repository:
 sudo bash scripts/prepare-debian.sh --disable-sleep

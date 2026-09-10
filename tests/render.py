@@ -128,6 +128,22 @@ def render():
         text = run("helm", "template", name, str(chart_path), "--namespace", hr["metadata"]["namespace"],
                    "--values", str(value_path), "--kube-version", "1.36.4", "--include-crds")
         objs = [d for d in yaml.safe_load_all(text) if d]
+        if name == "cilium":
+            # Verify the address reaches actual pods, including API-dependent init containers.
+            workloads = [d for d in objs if (d.get("kind"), d["metadata"]["name"]) in {
+                ("DaemonSet", "cilium"), ("Deployment", "cilium-operator")}]
+            assert len(workloads) == 2
+            checked = set()
+            for workload in workloads:
+                pod = workload["spec"]["template"]["spec"]
+                for container in pod["containers"] + pod.get("initContainers", []):
+                    env = {e["name"]: e.get("value") for e in container.get("env", [])}
+                    if "KUBERNETES_SERVICE_HOST" in env:
+                        assert env["KUBERNETES_SERVICE_HOST"] == settings["API_HOST"], container["name"]
+                        assert str(env["KUBERNETES_SERVICE_PORT"]) == "6443", container["name"]
+                        checked.add((workload["metadata"]["name"], container["name"]))
+            assert {("cilium", "cilium-agent"), ("cilium-operator", "cilium-operator")} <= checked
+            print(f"Verified Cilium API address in {len(checked)} agent/operator/init containers")
         write(ROOT / "rendered/charts" / (name + ".yaml"), objs)
         chart_objects.extend(objs)
         print(f"Rendered {name}: chart {chart['version']}")
