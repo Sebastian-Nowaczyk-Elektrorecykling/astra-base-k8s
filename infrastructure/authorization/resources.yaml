@@ -160,7 +160,7 @@ spec:
       - name: authorino
         image: quay.io/kuadrant/authorino:v0.26.3
         args:
-        - server
+        # The image ENTRYPOINT is already ["authorino", "server"].
         - --watch-namespace=authorization
         - --ext-auth-http-port=0
         - --oidc-http-port=0
@@ -191,6 +191,9 @@ spec:
             - ALL
           readOnlyRootFilesystem: true
           runAsNonRoot: true
+          # The pinned image declares USER authorino; its Dockerfile creates UID 1000.
+          # A numeric UID lets kubelet enforce runAsNonRoot before starting the process.
+          runAsUser: 1000
 ---
 apiVersion: v1
 kind: Service

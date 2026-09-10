@@ -6,6 +6,8 @@
 
 The GitHub Actions workflow also pulls and lints the actual pinned Helm charts, runs Kustomize, and loads upstream CRDs into a disposable Kubernetes 1.36 kind cluster. It installs the real Kyverno webhook there, performs strict server-side dry runs, confirms CNPG's default class mutation and rejects alternate NodePort/native-route/security-policy paths. CI uses no deployment secrets and does not contact your laptops. Look at the workflow result for the exact commit, rather than assuming a checked-in workflow has passed.
 
+The same disposable cluster starts the actual pinned Authorino image using this repository's Deployment, ServiceAccount and RBAC. CI waits for the readiness probe and checks that the process runs as UID 1000. This catches runtime user/entrypoint errors that server-side dry runs cannot detect. It does not exercise the full identity/OpenFGA request path.
+
 Separate fresh Debian 12 and 13 amd64 containers run the actual `prepare-workstation.sh` installer. They check installed CLI versions, perform an age/SOPS encryption/decryption round trip, and build the Flux manifests twice: once with generated controllers and an empty sync placeholder, then with generated GitRepository/Kustomization objects. These regress the reported empty-bootstrap failure without using a GitHub token or contacting a Kubernetes cluster. The installer also supports the upstream arm64 binaries; these CI jobs exercise amd64.
 
 The Debian jobs also exercise `configure-cluster.sh` with a nondefault API IP and a DNS name. They verify mismatch rejection, propagation into GitOps settings, preservation of unrelated configuration and repeatable execution. Chart validation checks the rendered API host/port in the Cilium agent, operator and API-dependent init containers.
