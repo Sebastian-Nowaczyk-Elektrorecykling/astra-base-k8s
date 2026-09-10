@@ -52,7 +52,7 @@ spec:
     ingress:
       enabled: false
     nodeSelector:
-      astra.local/workloads: 'true'
+      elektro.local/workloads: 'true'
     checkQueryCache:
       enabled: false
     resources:

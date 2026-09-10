@@ -6,18 +6,18 @@ metadata:
   annotations:
     kustomize.toolkit.fluxcd.io/substitute: disabled
 data:
-  astra-realm.json: "{\n  \"realm\": \"astra\",\n  \"enabled\": true,\n  \"registrationAllowed\": false,\n  \"loginWithEmailAllowed\"\
+  elektro-realm.json: "{\n  \"realm\": \"elektro\",\n  \"enabled\": true,\n  \"registrationAllowed\": false,\n  \"loginWithEmailAllowed\"\
     : true,\n  \"duplicateEmailsAllowed\": false,\n  \"resetPasswordAllowed\": true,\n  \"bruteForceProtected\"\
     : true,\n  \"sslRequired\": \"external\",\n  \"accessTokenLifespan\": 300,\n  \"roles\": {\n    \"realm\": [\n\
     \      {\n        \"name\": \"platform-admin\"\n      }\n    ]\n  },\n  \"clients\": [\n    {\n      \"clientId\"\
-    : \"astra-edge\",\n      \"name\": \"Astra protected gateway\",\n      \"enabled\": true,\n      \"protocol\"\
+    : \"elektro-edge\",\n      \"name\": \"Elektro protected gateway\",\n      \"enabled\": true,\n      \"protocol\"\
     : \"openid-connect\",\n      \"publicClient\": false,\n      \"secret\": \"${EDGE_OIDC_CLIENT_SECRET}\",\n \
     \     \"standardFlowEnabled\": true,\n      \"directAccessGrantsEnabled\": false,\n      \"serviceAccountsEnabled\"\
     : false,\n      \"fullScopeAllowed\": false,\n      \"redirectUris\": [\n        \"https://longhorn.apps.${BASE_DOMAIN}/oauth2/callback\"\
     \n      ],\n      \"webOrigins\": [],\n      \"defaultClientScopes\": [\n        \"profile\",\n        \"email\"\
     \n      ],\n      \"protocolMappers\": [\n        {\n          \"name\": \"edge-audience\",\n          \"protocol\"\
     : \"openid-connect\",\n          \"protocolMapper\": \"oidc-audience-mapper\",\n          \"config\": {\n  \
-    \          \"included.client.audience\": \"astra-edge\",\n            \"access.token.claim\": \"true\",\n  \
+    \          \"included.client.audience\": \"elektro-edge\",\n            \"access.token.claim\": \"true\",\n  \
     \          \"id.token.claim\": \"false\"\n          }\n        }\n      ]\n    }\n  ]\n}"
 ---
 apiVersion: apps/v1
@@ -39,7 +39,7 @@ spec:
     spec:
       automountServiceAccountToken: false
       nodeSelector:
-        astra.local/workloads: 'true'
+        elektro.local/workloads: 'true'
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

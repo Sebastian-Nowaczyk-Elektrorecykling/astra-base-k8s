@@ -22,7 +22,7 @@ apt-get install -y ca-certificates curl jq git openssl iproute2 iptables \
   open-iscsi nfs-common cryptsetup dmsetup util-linux conntrack ethtool \
   socat chrony pciutils
 install -d -m 0755 /etc/modules-load.d /etc/sysctl.d /var/lib/longhorn
-cat >/etc/modules-load.d/astra-k8s.conf <<'EOF'
+cat >/etc/modules-load.d/elektro-k8s.conf <<'EOF'
 overlay
 br_netfilter
 iscsi_tcp
@@ -30,7 +30,7 @@ dm_crypt
 wireguard
 EOF
 for module in overlay br_netfilter iscsi_tcp dm_crypt wireguard; do modprobe "$module"; done
-cat >/etc/sysctl.d/90-astra-k8s.conf <<'EOF'
+cat >/etc/sysctl.d/90-elektro-k8s.conf <<'EOF'
 net.ipv4.ip_forward = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.bridge.bridge-nf-call-ip6tables = 1
@@ -39,10 +39,10 @@ fs.inotify.max_user_watches = 1048576
 EOF
 sysctl --system
 swapoff -a
-[[ -e /etc/fstab.astra-before-swap ]] || cp -a /etc/fstab /etc/fstab.astra-before-swap
-sed -i -E '/^[^#].*[[:space:]]swap[[:space:]]/s/^/# astra-disabled-swap: /' /etc/fstab
+[[ -e /etc/fstab.elektro-before-swap ]] || cp -a /etc/fstab /etc/fstab.elektro-before-swap
+sed -i -E '/^[^#].*[[:space:]]swap[[:space:]]/s/^/# elektro-disabled-swap: /' /etc/fstab
 systemctl enable --now iscsid chrony
-cat >/etc/systemd/system/astra-mount-propagation.service <<'EOF'
+cat >/etc/systemd/system/elektro-mount-propagation.service <<'EOF'
 [Unit]
 Description=Shared mount propagation for Kubernetes CSI
 Before=k3s.service k3s-agent.service
@@ -54,10 +54,10 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now astra-mount-propagation.service
+systemctl enable --now elektro-mount-propagation.service
 if $disable_sleep; then
   install -d /etc/systemd/logind.conf.d
-  cat >/etc/systemd/logind.conf.d/90-astra-laptop.conf <<'EOF'
+  cat >/etc/systemd/logind.conf.d/90-elektro-laptop.conf <<'EOF'
 [Login]
 HandleLidSwitch=ignore
 HandleLidSwitchExternalPower=ignore

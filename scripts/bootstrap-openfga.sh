@@ -12,7 +12,7 @@ tmp=$(mktemp -d "$repo/local/fga.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 printf 'Authorization: Bearer %s\n' "$(cat "$1")" >"$tmp/header"
 curl --fail-with-body --silent --show-error --header @"$tmp/header" \
-  --header 'Content-Type: application/json' --data '{"name":"astra-platform"}' \
+  --header 'Content-Type: application/json' --data '{"name":"elektro-platform"}' \
   http://127.0.0.1:8080/stores >"$tmp/store.json"
 store_id=$(jq -er .id "$tmp/store.json")
 # Persist immediately: if the next step fails, recover this store instead of losing its ID.

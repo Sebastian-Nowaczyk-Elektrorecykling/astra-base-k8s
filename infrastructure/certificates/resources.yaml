@@ -12,7 +12,7 @@ metadata:
   namespace: cert-manager
 spec:
   isCA: true
-  commonName: Astra private cluster root
+  commonName: Elektro private cluster root
   secretName: platform-root-ca
   duration: 87600h
   renewBefore: 8760h

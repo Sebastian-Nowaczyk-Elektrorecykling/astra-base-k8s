@@ -11,7 +11,7 @@ flowchart TD
   Edge -->|Only after allow| App[Application]
 ```
 
-The OAuth2 filter runs before JWT validation, which runs before external authorization. Browsers receive an OIDC redirect; machine clients can supply a Keycloak access token with audience `astra-edge`. Authorino verifies the signature again, checks issuer/audience, calls OpenFGA, and accepts only an explicit boolean allow. After authorization, Authorino overwrites the upstream Authorization header with the noncredential marker `GatewayAuthenticated` and sets `X-Astra-Subject` from the verified subject, replacing client-supplied values. Ordinary backends do not receive the bearer token in that header. There is no permission cache in Authorino/OpenFGA's configured Check path. A missing model, absent tuple, invalid JWT, failed request or authorization timeout denies access. Valid signed JWTs can remain usable until expiry during a Keycloak outage; this is normal offline JWT verification, not a fallback to anonymous access.
+The OAuth2 filter runs before JWT validation, which runs before external authorization. Browsers receive an OIDC redirect; machine clients can supply a Keycloak access token with audience `elektro-edge`. Authorino verifies the signature again, checks issuer/audience, calls OpenFGA, and accepts only an explicit boolean allow. After authorization, Authorino overwrites the upstream Authorization header with the noncredential marker `GatewayAuthenticated` and sets `X-Elektro-Subject` from the verified subject, replacing client-supplied values. Ordinary backends do not receive the bearer token in that header. There is no permission cache in Authorino/OpenFGA's configured Check path. A missing model, absent tuple, invalid JWT, failed request or authorization timeout denies access. Valid signed JWTs can remain usable until expiry during a Keycloak outage; this is normal offline JWT verification, not a fallback to anonymous access.
 
 The check is `principal:<Keycloak sub> access service:<lowercase hostname without port>`. A service account has its own stable subject and therefore independent grants. Email addresses are not permission identifiers. Cilium permits Authorino to call only OpenFGA's Check endpoint; it does not give application pods access to OpenFGA's write/admin API. The OpenFGA preshared key is itself powerful, so its Secret and the authorization namespace are platform-admin resources. Do not give it to ordinary applications or agents. Use scoped access through a reviewed gateway/OIDC design if applications later need authorization APIs.
 
@@ -36,7 +36,7 @@ bash scripts/bootstrap-openfga.sh local/openfga.key
 
 Copy the printed store/model IDs into `clusters/laptops/settings.yaml`, commit and push. IDs are not secrets. The script creates an immutable authorization model using the official API and records partial progress in `local/openfga-state.json`. If it fails after creating the store, reuse that store; do not repeatedly create new ones. Reapply a corrected model to the existing store and record the newly returned model ID. Models are immutable; there is no silent migration to “latest”.
 
-Find your user UUID (`sub`) in Keycloak's `astra` realm. Prepare this request with the actual UUID and hostname in `local/first-grant.json`:
+Find your user UUID (`sub`) in Keycloak's `elektro` realm. Prepare this request with the actual UUID and hostname in `local/first-grant.json`:
 
 ```json
 {
@@ -68,10 +68,10 @@ The realm ConfigMap is a **first-start import**. Keycloak skips importing an alr
 
 ## Dynamic projects and routing
 
-Use one `astra` realm with clients, groups/organizations and OpenFGA objects for most projects. A Keycloak client or organization is not a Kubernetes Service. Creating one cannot automatically deploy an application or grant traffic. A new project needs:
+Use one `elektro` realm with clients, groups/organizations and OpenFGA objects for most projects. A Keycloak client or organization is not a Kubernetes Service. Creating one cannot automatically deploy an application or grant traffic. A new project needs:
 
 1. An application Service and workload, and either an exact HTTPRoute or a wildcard HTTPRoute for an existing multi-tenant application. Copy `examples/protected-app/` into a reconciled directory.
-2. An **exact** `https://HOST/oauth2/callback` registered on the `astra-edge` Keycloak client. Preserve existing callbacks when updating the list using the Admin API. The gateway uses the requesting hostname and host-only cookies; it does not share a bearer cookie over all sibling domains. Do not register `*` or claim Keycloak supports arbitrary hostname wildcards.
+2. An **exact** `https://HOST/oauth2/callback` registered on the `elektro-edge` Keycloak client. Preserve existing callbacks when updating the list using the Admin API. The gateway uses the requesting hostname and host-only cookies; it does not share a bearer cookie over all sibling domains. Do not register `*` or claim Keycloak supports arbitrary hostname wildcards.
 3. Explicit OpenFGA grants on `service:HOST`. Wildcard DNS/certificates/routes do not create wildcard permission grants. An unprovisioned tenant hostname has no access.
 
 Routes automatically inherit the apps listener policy. Authentication is not duplicated in every HTTPRoute. The native Kubernetes guard rejects routes outside `edge`, the wrong parent listener, raw ingress/TCP routes and security-policy overrides. Route authors are trusted platform automation; application namespaces do not get those permissions.
@@ -88,7 +88,7 @@ Multiple independent Keycloak realms have different issuers. They need explicit 
 | Agent acting for a user | Supported Keycloak standard token exchange, scoped client and target audience | User permission **and** the delegation/agent's allowed operation and resource scope |
 | Gateway to a resource the user cannot access directly | User authenticates to gateway; gateway uses a separate backend service identity | User may invoke the constrained gateway operation; gateway may access the backend; user gains no backend credential |
 
-For the autonomous case, rename and import `examples/keycloak-agent-client.json` into the `astra` realm using Keycloak's client import/Admin API. Let Keycloak generate its credential, retrieve it through secure administration, and grant only the intended service to its service-account subject in OpenFGA. The example creates no tuple and enables no token-exchange permission by itself.
+For the autonomous case, rename and import `examples/keycloak-agent-client.json` into the `elektro` realm using Keycloak's client import/Admin API. Let Keycloak generate its credential, retrieve it through secure administration, and grant only the intended service to its service-account subject in OpenFGA. The example creates no tuple and enables no token-exchange permission by itself.
 
 Disable password grants for clients. Prefer workload-specific clients and asymmetric client authentication where the upstream client supports it. Never hand every model/agent the bootstrap admin or OpenFGA key. Configure token-exchange permissions explicitly and narrow audience/scope. Keycloak's standard exchange is not a universal actor-token/impersonation solution; consult its supported grant semantics before choosing a delegation protocol.
 

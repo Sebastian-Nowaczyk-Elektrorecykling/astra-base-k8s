@@ -6,6 +6,8 @@
 
 The GitHub Actions workflow also pulls and lints the actual pinned Helm charts, runs Kustomize, and loads upstream CRDs into a disposable Kubernetes 1.36 kind cluster. It installs the real Kyverno webhook there, performs strict server-side dry runs, confirms CNPG's default class mutation and rejects alternate NodePort/native-route/security-policy paths. CI uses no deployment secrets and does not contact your laptops. Look at the workflow result for the exact commit, rather than assuming a checked-in workflow has passed.
 
+Separate fresh Debian 12 and 13 amd64 containers run the actual `prepare-workstation.sh` installer. They check installed CLI versions, perform an age/SOPS encryption/decryption round trip, and build the Flux manifests twice: once with generated controllers and an empty sync placeholder, then with generated GitRepository/Kustomization objects. These regress the reported empty-bootstrap failure without using a GitHub token or contacting a Kubernetes cluster. The installer also supports the upstream arm64 binaries; these CI jobs exercise amd64.
+
 These checks do not exercise physical Debian installation, Cilium's real LAN/ARP/WireGuard behavior, Longhorn iSCSI and disk recovery, browser sessions, Google credentials, GPU drivers, or a complete production cluster. Complete the following acceptance checks on your hardware before relying on the foundation.
 
 ## Access checks
@@ -21,7 +23,7 @@ bash scripts/verify-access.sh longhorn.apps.YOUR_DOMAIN local/platform-ca.crt
 | Logged-in user without FGA tuple | 403 |
 | User with exact service-access tuple | Dashboard available |
 | Wrong JWT issuer, audience, signature or expired token | Denied |
-| Authorized request observed by backend | Authorization is `GatewayAuthenticated`, not a bearer token; X-Astra-Subject is the verified subject |
+| Authorized request observed by backend | Authorization is `GatewayAuthenticated`, not a bearer token; X-Elektro-Subject is the verified subject |
 | Remove the user's FGA tuple | New dashboard request denied |
 | New application hostname without callback registration | Login cannot complete; no bypass |
 | New hostname with callback but without a tuple | Denied |

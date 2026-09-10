@@ -7,6 +7,9 @@ Reviewed 2026-09-09. These are exact starting versions, not a claim of permanent
 | k3s | `v1.36.4+k3s1` | [release](https://github.com/k3s-io/k3s/releases/tag/v1.36.4%2Bk3s1) |
 | Cilium | chart `1.20.1` | [release](https://github.com/cilium/cilium/releases/tag/v1.20.1) |
 | Flux | `v2.9.5` | [release](https://github.com/fluxcd/flux2/releases/tag/v2.9.5) |
+| Workstation kubectl | `v1.36.4` | [installation and checksum validation](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/) |
+| Workstation Helm | `v4.2.4` | [release](https://github.com/helm/helm/releases/tag/v4.2.4) |
+| Workstation SOPS | `v3.13.3` | [release](https://github.com/getsops/sops/releases/tag/v3.13.3) |
 | Longhorn | chart `1.12.1`, V1 data engine | [release](https://github.com/longhorn/longhorn/releases/tag/v1.12.1) |
 | CloudNativePG | chart `0.29.0`, operator `1.30.0` | [chart](https://github.com/cloudnative-pg/charts/releases/tag/cloudnative-pg-v0.29.0), [support](https://cloudnative-pg.io/docs/1.30/supported_releases/) |
 | PostgreSQL | `17.11-standard-trixie` | [official operand images](https://github.com/cloudnative-pg/postgres-containers) |
@@ -21,6 +24,8 @@ Reviewed 2026-09-09. These are exact starting versions, not a claim of permanent
 | Optional PG backup | Barman chart `0.8.0` | [release](https://github.com/cloudnative-pg/charts/releases/tag/plugin-barman-cloud-v0.8.0) |
 
 ## Why these integrations
+
+Workstation CLI pins were checked on 2026-09-10. The workstation installer validates published SHA-256 checksums before installing binaries. Debian supplies age and the other administration dependencies through its signed package repositories. The Flux file layout follows [upstream bootstrap customization](https://fluxcd.io/flux/installation/configuration/bootstrap-customization/): include both generated manifests and provide an initially empty sync file for the component-install phase.
 
 - [k3s embedded-etcd HA](https://docs.k3s.io/datastore/ha-embedded) and [custom CNI/egress configuration](https://docs.k3s.io/networking/basic-network-options) are the basis for the server flags. Disable the bundled competing network/storage components on **every** server.
 - [Cilium L2 announcements](https://docs.cilium.io/en/stable/network/l2-announcements/) and [LB IPAM](https://docs.cilium.io/en/stable/network/lb-ipam/) replace a separate application load-balancer allocator. The service's external traffic policy is `Cluster`, compatible with L2 announcement behavior.

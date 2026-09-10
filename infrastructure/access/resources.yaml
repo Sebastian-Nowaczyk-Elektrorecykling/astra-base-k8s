@@ -13,10 +13,10 @@ spec:
     sectionName: apps
   oidc:
     provider:
-      issuer: https://id.${BASE_DOMAIN}/realms/astra
-      authorizationEndpoint: https://id.${BASE_DOMAIN}/realms/astra/protocol/openid-connect/auth
-      tokenEndpoint: http://keycloak.identity.svc.cluster.local:8080/realms/astra/protocol/openid-connect/token
-    clientID: astra-edge
+      issuer: https://id.${BASE_DOMAIN}/realms/elektro
+      authorizationEndpoint: https://id.${BASE_DOMAIN}/realms/elektro/protocol/openid-connect/auth
+      tokenEndpoint: http://keycloak.identity.svc.cluster.local:8080/realms/elektro/protocol/openid-connect/token
+    clientID: elektro-edge
     clientSecret:
       name: edge-oidc
     scopes:
@@ -31,11 +31,11 @@ spec:
   jwt:
     providers:
     - name: keycloak
-      issuer: https://id.${BASE_DOMAIN}/realms/astra
+      issuer: https://id.${BASE_DOMAIN}/realms/elektro
       audiences:
-      - astra-edge
+      - elektro-edge
       remoteJWKS:
-        uri: http://keycloak.identity.svc.cluster.local:8080/realms/astra/protocol/openid-connect/certs
+        uri: http://keycloak.identity.svc.cluster.local:8080/realms/elektro/protocol/openid-connect/certs
   extAuth:
     grpc:
       backendRefs:
@@ -56,7 +56,7 @@ spec:
   authentication:
     keycloak:
       jwt:
-        jwksUrl: http://keycloak.identity.svc.cluster.local:8080/realms/astra/protocol/openid-connect/certs
+        jwksUrl: http://keycloak.identity.svc.cluster.local:8080/realms/elektro/protocol/openid-connect/certs
   metadata:
     fga:
       http:
@@ -80,7 +80,7 @@ spec:
         patterns:
         - selector: auth.identity.iss
           operator: eq
-          value: https://id.${BASE_DOMAIN}/realms/astra
+          value: https://id.${BASE_DOMAIN}/realms/elektro
     fga-allow:
       patternMatching:
         patterns:
@@ -91,17 +91,17 @@ spec:
         - any:
           - selector: auth.identity.aud
             operator: eq
-            value: astra-edge
+            value: elektro-edge
           - selector: auth.identity.aud
             operator: incl
-            value: astra-edge
+            value: elektro-edge
   response:
     success:
       headers:
         authorization:
           plain:
             value: GatewayAuthenticated
-        x-astra-subject:
+        x-elektro-subject:
           plain:
             selector: auth.identity.sub
 ---

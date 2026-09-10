@@ -20,7 +20,20 @@ Change `clusters/laptops/settings.yaml`. Set the real interface regex for L2 ann
 
 Copy `bootstrap/cluster.env.example` to `local/cluster.env` on each host. Its API address and CIDRs must match the GitOps settings. All servers must receive identical critical k3s options. CIDRs must not overlap LAN/VPN networks. Do not change them on a running cluster.
 
-The administrator workstation needs Git, kubectl matching Kubernetes 1.36, Helm 4, Flux 2.9.5, age, SOPS, curl, jq and OpenSSL. Install them using their official distributions. These are workstation tools, not additional cluster controllers.
+Prepare the administrator workstation from a checkout of this repository:
+
+```sh
+sudo bash scripts/prepare-workstation.sh
+hash -r
+```
+
+On a fresh Debian machine without Git, first run `sudo apt-get update` and `sudo apt-get install -y git ca-certificates`, then clone this repository. If Debian has no sudo configured, perform the package installation and workstation script as root with `su -`; run the remaining bootstrap commands as your regular user.
+
+The installer supports Debian 12/13 on amd64 and arm64. It installs Git, the SSH client, curl, jq, OpenSSL and age from Debian, then checksum-verifies and installs kubectl, Helm, Flux and SOPS from their official release archives into `/usr/local/bin`. Their versions are pinned in `bootstrap/versions.env`; kubectl matches k3s's Kubernetes version. Re-running the script installs those same pins, including replacing an existing copy in `/usr/local/bin`. Keep that directory in PATH before older copies of these commands.
+
+The script prepares administration tools only. Cluster-node preparation remains `scripts/prepare-debian.sh`; workstation installation does not configure kubeconfig, generate credentials, change swap, install a container runtime or join a cluster.
+
+If you already installed nodes with the original `astra.local` labels, follow [the Elektro naming update](rename-elektro.md) before continuing with Flux.
 
 ## 2. Prepare and start nodes
 
@@ -89,6 +102,10 @@ git pull --ff-only
 
 The GitHub token bootstraps Flux's read-only SSH deploy key; the token is not stored in the cluster. Back up the age private key offline. `sops-age` must be restored before Flux can recover encrypted resources. The cluster's `.sops.yaml` can be added with your public recipient if you want convenient `sops` edits. Never commit decrypted copies.
 
+The checked-in `flux-system/kustomization.yaml` references both `gotk-components.yaml` and `gotk-sync.yaml`. The latter starts as a comment-only placeholder, then Flux writes the real GitRepository and Kustomization during bootstrap. Flux preserves an existing Kustomization's resource list: leaving it empty causes `no Kubernetes objects found` even after the controllers' YAML has been generated. This layout follows [Flux's bootstrap customization procedure](https://fluxcd.io/flux/installation/configuration/bootstrap-customization/).
+
+To resume the previously failed attempt, pull this fix and rerun `bash scripts/bootstrap-flux.sh local/age.agekey` with the same key and temporary GitHub token. The [recovery guide](rename-elektro.md) includes the node-label update. Preserve your existing encrypted secrets and generated component manifests; there is no need to reinstall k3s or regenerate credentials.
+
 Flux starts prerequisites before consumers. `foundation → cilium → controllers → admission → storage → databases → identity/authorization → edge → access → routes` is the main chain; certificates and secrets have their own prerequisites. Helm installation/remediation uses upstream chart jobs and service accounts without a handcrafted fixup controller.
 
 ```sh
@@ -110,7 +127,7 @@ kubectl -n cert-manager get secret platform-root-ca -o jsonpath='{.data.ca\.crt}
 
 Install this public CA in each client OS/browser trust store using your normal administration process. Do not use `curl -k` or turn off certificate validation. For public certificates, use the DNS-01 example and change the edge Certificate issuer; do not run two issuers against the same secret. OIDC token/JWKS calls stay on restricted cluster Service endpoints so private-root trust is not a bootstrap dependency for the gateway controllers.
 
-Visit `https://id.YOUR_DOMAIN/admin`. Retrieve the initial bootstrap-admin password from your encrypted secret using your secure local tools. Create a permanent, MFA-protected admin account in the master realm, verify it, then remove the temporary bootstrap administrator. Create an `astra` realm user with a password (and preferably MFA). Realm import creates no human user and enables no public registration.
+Visit `https://id.YOUR_DOMAIN/admin`. Retrieve the initial bootstrap-admin password from your encrypted secret using your secure local tools. Create a permanent, MFA-protected admin account in the master realm, verify it, then remove the temporary bootstrap administrator. Create an `elektro` realm user with a password (and preferably MFA). Realm import creates no human user and enables no public registration.
 
 Continue with [OpenFGA initialization and the first grant](identity-access.md#initialize-openfga). After the first grant, Longhorn will be accessible through the protected host. Run the access acceptance checks before using real data.
 

@@ -27,7 +27,7 @@ spec:
   values:
     runtimeClassName: nvidia
     nodeSelector:
-      astra.local/gpu-vendor: nvidia
+      elektro.local/gpu-vendor: nvidia
     gfd:
       enabled: false
     nfd:
@@ -44,7 +44,7 @@ spec:
         requiredDuringSchedulingIgnoredDuringExecution:
           nodeSelectorTerms:
           - matchExpressions:
-            - key: astra.local/gpu-vendor
+            - key: elektro.local/gpu-vendor
               operator: In
               values:
               - nvidia

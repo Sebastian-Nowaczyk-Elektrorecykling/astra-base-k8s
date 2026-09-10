@@ -9,6 +9,22 @@ concurrency:
   group: validate-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  workstation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        debian: ['12', '13']
+    container: debian:${{ matrix.debian }}-slim
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Install workstation tools on fresh Debian
+        run: bash scripts/prepare-workstation.sh
+      - name: Exercise CLI tools and Flux bootstrap manifests
+        run: bash tests/workstation.sh
   manifests:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -41,9 +57,9 @@ jobs:
           python tests/render.py --charts
       - name: Validate admission against Kubernetes 1.36
         run: |
-          kind create cluster --name astra-validation --wait 120s --image kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
+          kind create cluster --name elektro-validation --wait 120s --image kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
           kubectl create namespace app-demo
           bash tests/admission.sh
       - name: Clean up disposable cluster
         if: always()
-        run: kind delete cluster --name astra-validation
+        run: kind delete cluster --name elektro-validation

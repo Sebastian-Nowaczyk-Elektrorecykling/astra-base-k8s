@@ -46,14 +46,14 @@ cat >"$cfg" <<EOF
 node-name: "$node_name"
 node-ip: "$node_ip"
 node-label:
-  - "astra.local/role=$role"
-  - "astra.local/workloads=$([[ $role == controller ]] && echo false || echo true)"
+  - "elektro.local/role=$role"
+  - "elektro.local/workloads=$([[ $role == controller ]] && echo false || echo true)"
   - "node.longhorn.io/create-default-disk=$([[ $role == controller ]] && echo false || echo true)"
 EOF
 if [[ $role == controller ]]; then
   cat >>"$cfg" <<'EOF'
 node-taint:
-  - "astra.local/dedicated=control-plane:NoSchedule"
+  - "elektro.local/dedicated=control-plane:NoSchedule"
 EOF
 fi
 if [[ $role != worker ]]; then

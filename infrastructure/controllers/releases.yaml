@@ -36,17 +36,17 @@ spec:
       replicaSoftAntiAffinity: false
       storageOverProvisioningPercentage: 100
       storageMinimalAvailablePercentage: 15
-      systemManagedComponentsNodeSelector: astra.local/workloads:true
+      systemManagedComponentsNodeSelector: elektro.local/workloads:true
     longhornManager:
       nodeSelector:
-        astra.local/workloads: 'true'
+        elektro.local/workloads: 'true'
     longhornDriver:
       nodeSelector:
-        astra.local/workloads: 'true'
+        elektro.local/workloads: 'true'
     longhornUI:
       replicas: 1
       nodeSelector:
-        astra.local/workloads: 'true'
+        elektro.local/workloads: 'true'
     ingress:
       enabled: false
     csi:

@@ -1,4 +1,4 @@
-# Astra base Kubernetes
+# Elektro base Kubernetes
 
 A small, GitOps-managed cluster for Debian machines. Start with `k8s1` as a controller/worker hybrid and `k8s2` / `k8s3` as workers. Hostnames carry no hardware assumptions. All installed services are existing upstream projects; there is no custom controller, authentication server, operator framework, or application runtime in this repository.
 
@@ -21,6 +21,10 @@ Envoy Gateway supplies a supported OIDC/external-auth policy API. Cilium remains
 ## Start here
 
 Follow [the bootstrap runbook](docs/bootstrap.md). It covers DNS/IP choices, host preparation, joining nodes, the one-time Cilium install, encrypted secrets, Flux bootstrap and first login. Review [the access model](docs/identity-access.md) before granting the first dashboard permission.
+
+On a fresh Debian administrator workstation, run `sudo bash scripts/prepare-workstation.sh` to install the required command-line tools. The setup is named **Elektro**; its existing GitHub repository remains `astra-base-k8s`.
+
+If an earlier bootstrap failed with `no Kubernetes objects found`, follow [the recovery and node-label update](docs/rename-elektro.md) before retrying.
 
 ```sh
 # On each freshly installed Debian host, from this repository:

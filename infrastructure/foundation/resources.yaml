@@ -3,7 +3,7 @@ kind: Namespace
 metadata:
   name: longhorn-system
   labels:
-    app.kubernetes.io/part-of: astra-base
+    app.kubernetes.io/part-of: elektro-base
     pod-security.kubernetes.io/enforce: privileged
 ---
 apiVersion: v1
@@ -11,7 +11,7 @@ kind: Namespace
 metadata:
   name: cnpg-system
   labels:
-    app.kubernetes.io/part-of: astra-base
+    app.kubernetes.io/part-of: elektro-base
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -19,7 +19,7 @@ kind: Namespace
 metadata:
   name: cert-manager
   labels:
-    app.kubernetes.io/part-of: astra-base
+    app.kubernetes.io/part-of: elektro-base
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -27,7 +27,7 @@ kind: Namespace
 metadata:
   name: kyverno
   labels:
-    app.kubernetes.io/part-of: astra-base
+    app.kubernetes.io/part-of: elektro-base
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -35,7 +35,7 @@ kind: Namespace
 metadata:
   name: envoy-gateway-system
   labels:
-    app.kubernetes.io/part-of: astra-base
+    app.kubernetes.io/part-of: elektro-base
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -43,7 +43,7 @@ kind: Namespace
 metadata:
   name: identity
   labels:
-    app.kubernetes.io/part-of: astra-base
+    app.kubernetes.io/part-of: elektro-base
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -51,7 +51,7 @@ kind: Namespace
 metadata:
   name: authorization
   labels:
-    app.kubernetes.io/part-of: astra-base
+    app.kubernetes.io/part-of: elektro-base
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -59,7 +59,7 @@ kind: Namespace
 metadata:
   name: edge
   labels:
-    app.kubernetes.io/part-of: astra-base
+    app.kubernetes.io/part-of: elektro-base
     pod-security.kubernetes.io/enforce: baseline
 ---
 apiVersion: v1
@@ -67,7 +67,7 @@ kind: Namespace
 metadata:
   name: gpu-system
   labels:
-    app.kubernetes.io/part-of: astra-base
+    app.kubernetes.io/part-of: elektro-base
     pod-security.kubernetes.io/enforce: privileged
 ---
 apiVersion: source.toolkit.fluxcd.io/v1

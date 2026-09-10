@@ -1,7 +1,7 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: astra-services
+  name: elektro-services
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -28,16 +28,16 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: astra-services
+  name: elektro-services
 spec:
-  policyName: astra-services
+  policyName: elektro-services
   validationActions:
   - Deny
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: astra-http-routes
+  name: elektro-http-routes
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -71,16 +71,16 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: astra-http-routes
+  name: elektro-http-routes
 spec:
-  policyName: astra-http-routes
+  policyName: elektro-http-routes
   validationActions:
   - Deny
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: astra-no-alternate-routes
+  name: elektro-no-alternate-routes
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -127,16 +127,16 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: astra-no-alternate-routes
+  name: elektro-no-alternate-routes
 spec:
-  policyName: astra-no-alternate-routes
+  policyName: elektro-no-alternate-routes
   validationActions:
   - Deny
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: astra-access-policy
+  name: elektro-access-policy
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -166,24 +166,24 @@ spec:
       == 'Gateway' && object.spec.targetRefs[0].sectionName == 'apps')
     message: Browser login, JWT validation and fail-closed Authorino must protect the apps listener.
   - expression: request.operation == 'DELETE' || (has(object.spec.jwt) && has(object.spec.oidc) && object.spec.jwt.providers.size()
-      == 1 && object.spec.jwt.providers[0].issuer == 'https://id.${BASE_DOMAIN}/realms/astra' && object.spec.jwt.providers[0].audiences
-      == ['astra-edge'] && object.spec.oidc.provider.issuer == 'https://id.${BASE_DOMAIN}/realms/astra' && object.spec.oidc.clientID
-      == 'astra-edge')
+      == 1 && object.spec.jwt.providers[0].issuer == 'https://id.${BASE_DOMAIN}/realms/elektro' && object.spec.jwt.providers[0].audiences
+      == ['elektro-edge'] && object.spec.oidc.provider.issuer == 'https://id.${BASE_DOMAIN}/realms/elektro' && object.spec.oidc.clientID
+      == 'elektro-edge')
     message: The protected listener requires the platform issuer and exact gateway audience.
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: astra-access-policy
+  name: elektro-access-policy
 spec:
-  policyName: astra-access-policy
+  policyName: elektro-access-policy
   validationActions:
   - Deny
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: astra-gateways
+  name: elektro-gateways
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -210,16 +210,16 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: astra-gateways
+  name: elektro-gateways
 spec:
-  policyName: astra-gateways
+  policyName: elektro-gateways
   validationActions:
   - Deny
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: astra-gateway-class
+  name: elektro-gateway-class
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -240,16 +240,16 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: astra-gateway-class
+  name: elektro-gateway-class
 spec:
-  policyName: astra-gateway-class
+  policyName: elektro-gateway-class
   validationActions:
   - Deny
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: astra-envoy-proxy
+  name: elektro-envoy-proxy
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -270,16 +270,16 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: astra-envoy-proxy
+  name: elektro-envoy-proxy
 spec:
-  policyName: astra-envoy-proxy
+  policyName: elektro-envoy-proxy
   validationActions:
   - Deny
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: astra-workload-pods
+  name: elektro-workload-pods
 spec:
   failurePolicy: Fail
   matchConstraints:
@@ -320,8 +320,8 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: astra-workload-pods
+  name: elektro-workload-pods
 spec:
-  policyName: astra-workload-pods
+  policyName: elektro-workload-pods
   validationActions:
   - Deny

@@ -1,0 +1,3 @@
+# Flux bootstrap replaces this placeholder with its GitRepository and Kustomization.
+# The file must exist because bootstrap builds kustomization.yaml when installing
+# controllers, before it generates the sync manifests.

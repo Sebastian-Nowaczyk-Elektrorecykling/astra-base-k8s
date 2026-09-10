@@ -21,7 +21,7 @@ spec:
       memory: 1Gi
   affinity:
     nodeSelector:
-      astra.local/workloads: 'true'
+      elektro.local/workloads: 'true'
     enablePodAntiAffinity: true
     podAntiAffinityType: required
   postgresql:
@@ -52,7 +52,7 @@ spec:
       memory: 1Gi
   affinity:
     nodeSelector:
-      astra.local/workloads: 'true'
+      elektro.local/workloads: 'true'
     enablePodAntiAffinity: true
     podAntiAffinityType: required
   postgresql:

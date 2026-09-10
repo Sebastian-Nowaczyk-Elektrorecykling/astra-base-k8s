@@ -50,6 +50,10 @@ def static():
             continue
         for resource in read(p)[0].get("resources", []):
             assert (p.parent / resource).exists(), (p, resource)
+    flux_base = ROOT / "clusters/laptops/flux-system"
+    assert {"gotk-components.yaml", "gotk-sync.yaml"}.issubset(
+        read(flux_base / "kustomization.yaml")[0]["resources"]), "Flux bootstrap must include controllers and sync resources"
+    assert any(d.get("kind") == "Deployment" for d in read(flux_base / "gotk-components.yaml"))
     phases = read(ROOT / "clusters/laptops/reconciliation.yaml")
     by_name = {p["metadata"]["name"]: p for p in phases}
     def visit(name, trail):
@@ -64,6 +68,14 @@ def static():
         "longhorn": "1", "longhorn-3": "3", "longhorn-cnpg": "1"}
     assert all(c["reclaimPolicy"] == "Retain" and c["parameters"]["dataEngine"] == "v1" for c in classes)
     sp = read(ROOT / "infrastructure/access/resources.yaml")[0]["spec"]
+    realm_config = read(ROOT / "infrastructure/identity/resources.yaml")[0]["data"]
+    realm = json.loads(realm_config["elektro-realm.json"])
+    assert realm["realm"] == "elektro"
+    client = next(c for c in realm["clients"] if c["clientId"] == sp["oidc"]["clientID"])
+    assert client["clientId"] == "elektro-edge"
+    assert sp["oidc"]["provider"]["issuer"].endswith("/realms/elektro")
+    assert all(p["issuer"] == sp["oidc"]["provider"]["issuer"] and p["audiences"] == [client["clientId"]]
+               for p in sp["jwt"]["providers"])
     assert sp["extAuth"]["failOpen"] is False and sp["oidc"] and sp["jwt"]
     assert "cookieDomain" not in sp["oidc"]
     assert by_name["routes"]["spec"]["dependsOn"] == [{"name": "access"}]

@@ -11,7 +11,7 @@ spec:
       restartPolicy: Never
       runtimeClassName: nvidia
       nodeSelector:
-        astra.local/gpu-vendor: nvidia
+        elektro.local/gpu-vendor: nvidia
       tolerations:
       - key: nvidia.com/gpu
         operator: Exists
