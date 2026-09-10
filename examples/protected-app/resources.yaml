@@ -60,7 +60,7 @@ spec:
   - name: platform
     sectionName: apps
   hostnames:
-  - demo.apps.${BASE_DOMAIN}
+  - demo.internal
   rules:
   - backendRefs:
     - name: demo

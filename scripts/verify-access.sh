@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-[[ $# == 2 && $1 =~ ^[A-Za-z0-9.-]+$ && -s $2 ]] || { echo 'Usage: verify-access.sh longhorn.apps.YOUR_DOMAIN local/platform-ca.crt' >&2; exit 2; }
+[[ $# == 2 && $1 =~ ^[A-Za-z0-9.-]+$ && -s $2 ]] || { echo 'Usage: verify-access.sh longhorn.admin.internal local/platform-ca.crt' >&2; exit 2; }
 host=$1 ca=$2
 for spoof in '' 'Authorization: Bearer invalid' 'X-Auth-Request-User: administrator' 'X-Forwarded-User: administrator'; do
   args=()

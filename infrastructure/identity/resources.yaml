@@ -13,7 +13,7 @@ data:
     : \"elektro-edge\",\n      \"name\": \"Elektro protected gateway\",\n      \"enabled\": true,\n      \"protocol\"\
     : \"openid-connect\",\n      \"publicClient\": false,\n      \"secret\": \"${EDGE_OIDC_CLIENT_SECRET}\",\n \
     \     \"standardFlowEnabled\": true,\n      \"directAccessGrantsEnabled\": false,\n      \"serviceAccountsEnabled\"\
-    : false,\n      \"fullScopeAllowed\": false,\n      \"redirectUris\": [\n        \"https://longhorn.apps.${BASE_DOMAIN}/oauth2/callback\"\
+    : false,\n      \"fullScopeAllowed\": false,\n      \"redirectUris\": [\n        \"https://longhorn.admin.internal/oauth2/callback\"\
     \n      ],\n      \"webOrigins\": [],\n      \"defaultClientScopes\": [\n        \"profile\",\n        \"email\"\
     \n      ],\n      \"protocolMappers\": [\n        {\n          \"name\": \"edge-audience\",\n          \"protocol\"\
     : \"openid-connect\",\n          \"protocolMapper\": \"oidc-audience-mapper\",\n          \"config\": {\n  \
@@ -60,7 +60,7 @@ spec:
         - name: KC_DB_USERNAME
           value: keycloak
         - name: KC_HOSTNAME
-          value: https://id.${BASE_DOMAIN}
+          value: https://${IDENTITY_HOST}
         - name: KC_HTTP_ENABLED
           value: 'true'
         - name: KC_PROXY_HEADERS
@@ -73,8 +73,8 @@ spec:
           value: 'true'
         - name: KC_BOOTSTRAP_ADMIN_USERNAME
           value: bootstrap-admin
-        - name: BASE_DOMAIN
-          value: ${BASE_DOMAIN}
+        - name: KC_HOSTNAME_ADMIN
+          value: https://keycloak.admin.internal
         - name: KC_DB_PASSWORD
           valueFrom:
             secretKeyRef:

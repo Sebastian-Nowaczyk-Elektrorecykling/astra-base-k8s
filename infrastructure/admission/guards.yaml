@@ -22,8 +22,16 @@ spec:
     message: NodePort services bypass the protected gateway.
   - expression: '!has(object.spec.type) || object.spec.type != ''LoadBalancer'' || (object.metadata.namespace ==
       ''envoy-gateway-system'' && has(object.metadata.labels) && ''gateway.envoyproxy.io/owning-gateway-name'' in
-      object.metadata.labels && object.metadata.labels[''gateway.envoyproxy.io/owning-gateway-name''] == ''platform'')'
-    message: Only the managed platform Envoy service may obtain a load balancer.
+      object.metadata.labels && has(object.metadata.annotations) && ''lbipam.cilium.io/ips'' in object.metadata.annotations
+      && has(object.spec.allocateLoadBalancerNodePorts) && !object.spec.allocateLoadBalancerNodePorts && ((object.metadata.labels[''gateway.envoyproxy.io/owning-gateway-name'']
+      == ''platform'' && object.metadata.annotations[''lbipam.cilium.io/ips''] == ''${EDGE_IP}'') || (variables.publicEnabled
+      && object.metadata.labels[''gateway.envoyproxy.io/owning-gateway-name''] == ''public'' && object.metadata.annotations[''lbipam.cilium.io/ips'']
+      == ''${PUBLIC_EDGE_IP}'')))'
+    message: Only managed gateways with distinct configured IPs and no NodePorts may obtain a load balancer.
+  variables:
+  - name: publicEnabled
+    expression: '''${PUBLIC_EDGE_IP}'' != ''NOT_CONFIGURED'' && ''${PUBLIC_EDGE_IP}'' != ''${EDGE_IP}'' && ''${IDENTITY_HOST}''
+      != ''internal'' && !''${IDENTITY_HOST}''.endsWith(''.internal'') && !''${IDENTITY_HOST}''.contains(''*'')'
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -54,19 +62,48 @@ spec:
   validations:
   - expression: object.metadata.namespace == "edge"
     message: HTTPRoutes are managed centrally in edge.
-  - expression: has(object.spec.parentRefs) && size(object.spec.parentRefs) == 1 && object.spec.parentRefs[0].name
-      == "platform" && (!has(object.spec.parentRefs[0].namespace) || object.spec.parentRefs[0].namespace == "edge")
-    message: Routes must attach to the platform gateway.
-  - expression: has(object.spec.hostnames) && size(object.spec.hostnames) > 0
-    message: Routes require explicit hosts.
-  - expression: '(object.spec.parentRefs[0].sectionName == ''apps'' && object.spec.hostnames.all(h, h.endsWith(''.apps.${BASE_DOMAIN}'')))
-      ||
-
-      (object.metadata.name == ''keycloak'' && object.spec.parentRefs[0].sectionName == ''identity'' && object.spec.hostnames
-      == [''id.${BASE_DOMAIN}''] && size(object.spec.rules) == 1 && !has(object.spec.rules[0].filters) && size(object.spec.rules[0].backendRefs)
-      == 1 && object.spec.rules[0].backendRefs[0].name == ''keycloak'' && object.spec.rules[0].backendRefs[0].namespace
-      == ''identity'' && object.spec.rules[0].backendRefs[0].port == 8080)'
-    message: Only Keycloak may use the native identity listener; applications use the protected apps listener.
+  - expression: has(object.spec.parentRefs) && object.spec.parentRefs.size() == 1 && (!has(variables.parent.group)
+      || variables.parent.group == 'gateway.networking.k8s.io') && (!has(variables.parent.kind) || variables.parent.kind
+      == 'Gateway') && (!has(variables.parent.namespace) || variables.parent.namespace == 'edge') && has(variables.parent.sectionName)
+      && (variables.parent.name == 'platform' || (variables.public && variables.publicEnabled))
+    message: Routes must attach to a managed gateway; public exposure must be explicitly enabled.
+  - expression: has(object.spec.hostnames) && object.spec.hostnames.size() > 0 && object.spec.hostnames.all(h, !h.contains('*'))
+    message: Routes require exact hostnames; wildcard routes are forbidden.
+  - expression: variables.public || variables.native || ((variables.parent.sectionName == 'admin' && object.spec.hostnames.all(h,
+      h.matches('^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?[.]admin[.]internal$'))) || (variables.parent.sectionName ==
+      'test' && object.spec.hostnames.all(h, h.matches('^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?[.]test[.]internal$')))
+      || (variables.parent.sectionName == 'staging' && object.spec.hostnames.all(h, h.matches('^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?[.]staging[.]internal$')))
+      || (variables.parent.sectionName == 'apps' && object.spec.hostnames.all(h, h.matches('^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?[.]internal$')
+      && !(h in ['hosts.internal','test.internal','staging.internal','admin.internal']))))
+    message: Internal hostnames must match their protected listener and contain one application label.
+  - expression: '!variables.public || (has(object.metadata.labels) && ''elektro.local/exposure'' in object.metadata.labels
+      && object.metadata.labels[''elektro.local/exposure''] == ''public'' && object.spec.hostnames.all(h, h != ''internal''
+      && !h.endsWith(''.internal'')) && (variables.native || (variables.parent.sectionName == ''apps'' && object.spec.hostnames.all(h,
+      h != ''${IDENTITY_HOST}''))))'
+    message: Public routes require the explicit exposure label and external hostnames; internal names are forbidden.
+  - expression: '!variables.native || (object.spec.rules.size() == 1 && !has(object.spec.rules[0].filters) && object.spec.rules[0].backendRefs.size()
+      == 1 && object.spec.rules[0].backendRefs.all(b, b.name == ''keycloak'' && b.namespace == ''identity'' && b.port
+      == 8080 && (!has(b.group) || b.group == '''') && (!has(b.kind) || b.kind == ''Service'') && !has(b.filters))
+      && ((!variables.public && object.metadata.name == ''keycloak'' && object.spec.hostnames == [''keycloak.admin.internal''])
+      || (variables.public && object.metadata.name == ''public-identity'' && object.spec.hostnames == [''${IDENTITY_HOST}'']
+      && has(object.spec.rules[0].matches) && object.spec.rules[0].matches.size() > 0 && object.spec.rules[0].matches.all(m,
+      has(m.path) && m.path.type == ''PathPrefix'' && m.path.value in [''/realms/elektro'',''/resources'']))))'
+    message: Only Keycloak may use the native identity listener; public identity paths exclude administration.
+  - expression: '!variables.public || variables.native || object.spec.rules.all(r, !has(r.filters) && has(r.backendRefs)
+      && r.backendRefs.size() > 0 && r.backendRefs.all(b, has(b.namespace) && !(b.namespace in [''kube-system'',''flux-system'',''identity'',''authorization'',''edge'',''envoy-gateway-system'',''cert-manager'',''kyverno'',''longhorn-system'',''cnpg-system'',''gpu-system''])
+      && (!has(b.group) || b.group == '''') && (!has(b.kind) || b.kind == ''Service'') && !has(b.filters)))'
+    message: Public application routes must directly reference application Services without filters or infrastructure
+      backends.
+  variables:
+  - name: publicEnabled
+    expression: '''${PUBLIC_EDGE_IP}'' != ''NOT_CONFIGURED'' && ''${PUBLIC_EDGE_IP}'' != ''${EDGE_IP}'' && ''${IDENTITY_HOST}''
+      != ''internal'' && !''${IDENTITY_HOST}''.endsWith(''.internal'') && !''${IDENTITY_HOST}''.contains(''*'')'
+  - name: parent
+    expression: object.spec.parentRefs[0]
+  - name: public
+    expression: variables.parent.name == 'public'
+  - name: native
+    expression: variables.parent.sectionName == 'identity'
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -155,21 +192,31 @@ spec:
   - expression: request.operation != "DELETE"
     message: Delete the Gateway before deliberately retiring this policy; change this guard through reviewed Git
       first.
-  - expression: request.operation == "DELETE" || (object.metadata.namespace == "edge" && object.metadata.name ==
-      "protected-access")
+  - expression: request.operation == 'DELETE' || (object.metadata.namespace == 'edge' && (object.metadata.name ==
+      'protected-access' || (variables.publicEnabled && object.metadata.name == 'protected-public-access')))
     message: Route-specific security overrides are forbidden.
   - expression: request.operation == 'DELETE' || (has(object.spec.oidc) && has(object.spec.jwt) && has(object.spec.extAuth)
       && has(object.spec.extAuth.failOpen) && !object.spec.extAuth.failOpen && has(object.spec.extAuth.grpc) &&
       object.spec.extAuth.grpc.backendRefs.size() == 1 && object.spec.extAuth.grpc.backendRefs[0].name == 'authorino'
       && object.spec.extAuth.grpc.backendRefs[0].namespace == 'authorization' && object.spec.extAuth.grpc.backendRefs[0].port
-      == 50051 && object.spec.targetRefs.size() == 1 && object.spec.targetRefs[0].name == 'platform' && object.spec.targetRefs[0].kind
-      == 'Gateway' && object.spec.targetRefs[0].sectionName == 'apps')
-    message: Browser login, JWT validation and fail-closed Authorino must protect the apps listener.
+      == 50051)
+    message: Browser login, JWT validation and fail-closed Authorino must protect every application listener.
   - expression: request.operation == 'DELETE' || (has(object.spec.jwt) && has(object.spec.oidc) && object.spec.jwt.providers.size()
-      == 1 && object.spec.jwt.providers[0].issuer == 'https://id.${BASE_DOMAIN}/realms/elektro' && object.spec.jwt.providers[0].audiences
-      == ['elektro-edge'] && object.spec.oidc.provider.issuer == 'https://id.${BASE_DOMAIN}/realms/elektro' && object.spec.oidc.clientID
+      == 1 && object.spec.jwt.providers[0].issuer == 'https://${IDENTITY_HOST}/realms/elektro' && object.spec.jwt.providers[0].audiences
+      == ['elektro-edge'] && object.spec.oidc.provider.issuer == 'https://${IDENTITY_HOST}/realms/elektro' && object.spec.oidc.clientID
       == 'elektro-edge')
     message: The protected listener requires the platform issuer and exact gateway audience.
+  - expression: request.operation == 'DELETE' || (has(object.spec.targetRefs) && !has(object.spec.targetRef) &&
+      !has(object.spec.targetSelectors) && object.spec.targetRefs.all(t, t.group == 'gateway.networking.k8s.io'
+      && t.kind == 'Gateway') && ((object.metadata.name == 'protected-access' && object.spec.targetRefs.size() ==
+      4 && ['admin','test','staging','apps'].all(n, object.spec.targetRefs.exists(t, t.name == 'platform' && t.sectionName
+      == n))) || (object.metadata.name == 'protected-public-access' && object.spec.targetRefs.size() == 1 && object.spec.targetRefs[0].name
+      == 'public' && object.spec.targetRefs[0].sectionName == 'apps')))
+    message: Security policies must cover every designated protected listener and cannot target identity.
+  variables:
+  - name: publicEnabled
+    expression: '''${PUBLIC_EDGE_IP}'' != ''NOT_CONFIGURED'' && ''${PUBLIC_EDGE_IP}'' != ''${EDGE_IP}'' && ''${IDENTITY_HOST}''
+      != ''internal'' && !''${IDENTITY_HOST}''.endsWith(''.internal'') && !''${IDENTITY_HOST}''.contains(''*'')'
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -198,14 +245,28 @@ spec:
       resources:
       - gateways
   validations:
-  - expression: object.metadata.namespace == "edge" && object.metadata.name == "platform" && object.spec.gatewayClassName
-      == "platform"
-    message: Only the managed platform Gateway is allowed.
-  - expression: object.spec.listeners.size() == 2 && object.spec.listeners.all(l, l.port == 443 && l.protocol ==
-      'HTTPS' && l.tls.mode == 'Terminate' && l.allowedRoutes.namespaces.from == 'Same') && object.spec.listeners.exists(l,
-      l.name == 'apps' && l.hostname == '*.apps.${BASE_DOMAIN}') && object.spec.listeners.exists(l, l.name == 'identity'
-      && l.hostname == 'id.${BASE_DOMAIN}')
-    message: Only the TLS apps and identity listeners with same-namespace routes are allowed.
+  - expression: object.metadata.namespace == 'edge' && object.spec.gatewayClassName == object.metadata.name && (object.metadata.name
+      == 'platform' || (variables.publicEnabled && object.metadata.name == 'public'))
+    message: Only managed private and explicitly enabled public Gateways are allowed.
+  - expression: 'object.spec.listeners.all(l, l.port == 443 && l.protocol == ''HTTPS'' && l.tls.mode == ''Terminate''
+      && l.allowedRoutes.namespaces.from == ''Same'' && l.tls.certificateRefs.size() == 1 && l.tls.certificateRefs[0].kind
+      == ''Secret'' && (!has(l.tls.certificateRefs[0].namespace) || l.tls.certificateRefs[0].namespace == ''edge'')
+      && l.tls.certificateRefs[0].name == (object.metadata.name == ''platform'' ? ''edge-tls'' : ''public-edge-tls''))'
+    message: Gateways require HTTPS, their own certificate and same-namespace routes.
+  - expression: object.metadata.name != 'platform' || (object.spec.listeners.size() == 5 && object.spec.listeners.exists(l,
+      l.name == 'identity' && l.hostname == 'keycloak.admin.internal') && object.spec.listeners.exists(l, l.name
+      == 'admin' && l.hostname == '*.admin.internal') && object.spec.listeners.exists(l, l.name == 'test' && l.hostname
+      == '*.test.internal') && object.spec.listeners.exists(l, l.name == 'staging' && l.hostname == '*.staging.internal')
+      && object.spec.listeners.exists(l, l.name == 'apps' && l.hostname == '*.internal'))
+    message: The private Gateway must provide the five fixed internal listeners.
+  - expression: object.metadata.name != 'public' || (object.spec.listeners.size() == 2 && object.spec.listeners.exists(l,
+      l.name == 'identity' && l.hostname == '${IDENTITY_HOST}') && object.spec.listeners.exists(l, l.name == 'apps'
+      && !has(l.hostname)))
+    message: The public Gateway has only canonical identity and protected application listeners.
+  variables:
+  - name: publicEnabled
+    expression: '''${PUBLIC_EDGE_IP}'' != ''NOT_CONFIGURED'' && ''${PUBLIC_EDGE_IP}'' != ''${EDGE_IP}'' && ''${IDENTITY_HOST}''
+      != ''internal'' && !''${IDENTITY_HOST}''.endsWith(''.internal'') && !''${IDENTITY_HOST}''.contains(''*'')'
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -234,8 +295,15 @@ spec:
       resources:
       - gatewayclasses
   validations:
-  - expression: object.metadata.name == 'platform' && object.spec.controllerName == 'gateway.envoyproxy.io/gatewayclass-controller'
-    message: Only the platform GatewayClass is allowed.
+  - expression: (object.metadata.name == 'platform' || (variables.publicEnabled && object.metadata.name == 'public'))
+      && object.spec.controllerName == 'gateway.envoyproxy.io/gatewayclass-controller' && object.spec.parametersRef.group
+      == 'gateway.envoyproxy.io' && object.spec.parametersRef.kind == 'EnvoyProxy' && object.spec.parametersRef.namespace
+      == 'edge' && object.spec.parametersRef.name == object.metadata.name
+    message: Only the managed GatewayClasses and matching EnvoyProxy configurations are allowed.
+  variables:
+  - name: publicEnabled
+    expression: '''${PUBLIC_EDGE_IP}'' != ''NOT_CONFIGURED'' && ''${PUBLIC_EDGE_IP}'' != ''${EDGE_IP}'' && ''${IDENTITY_HOST}''
+      != ''internal'' && !''${IDENTITY_HOST}''.endsWith(''.internal'') && !''${IDENTITY_HOST}''.contains(''*'')'
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -264,8 +332,15 @@ spec:
       resources:
       - envoyproxies
   validations:
-  - expression: object.metadata.namespace == 'edge' && object.metadata.name == 'platform'
-    message: Only the managed platform EnvoyProxy is allowed.
+  - expression: 'object.metadata.namespace == ''edge'' && (object.metadata.name == ''platform'' || (variables.publicEnabled
+      && object.metadata.name == ''public'')) && object.spec.provider.type == ''Kubernetes'' && !object.spec.provider.kubernetes.envoyService.allocateLoadBalancerNodePorts
+      && object.spec.provider.kubernetes.envoyService.annotations[''lbipam.cilium.io/ips''] == (object.metadata.name
+      == ''platform'' ? ''${EDGE_IP}'' : ''${PUBLIC_EDGE_IP}'')'
+    message: Only managed EnvoyProxy resources with distinct configured IPs and no NodePorts are allowed.
+  variables:
+  - name: publicEnabled
+    expression: '''${PUBLIC_EDGE_IP}'' != ''NOT_CONFIGURED'' && ''${PUBLIC_EDGE_IP}'' != ''${EDGE_IP}'' && ''${IDENTITY_HOST}''
+      != ''internal'' && !''${IDENTITY_HOST}''.endsWith(''.internal'') && !''${IDENTITY_HOST}''.contains(''*'')'
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding

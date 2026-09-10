@@ -78,6 +78,19 @@ def static():
                for p in sp["jwt"]["providers"])
     assert sp["extAuth"]["failOpen"] is False and sp["oidc"] and sp["jwt"]
     assert "cookieDomain" not in sp["oidc"]
+    settings = read(ROOT / "clusters/laptops/settings.yaml")[0]["data"]
+    assert "BASE_DOMAIN" not in settings
+    private_gateway = read(ROOT / "infrastructure/edge/resources.yaml")[-1]
+    listener_hosts = {l["name"]: l["hostname"] for l in private_gateway["spec"]["listeners"]}
+    assert listener_hosts == {"identity": "keycloak.admin.internal", "admin": "*.admin.internal",
+                              "test": "*.test.internal", "staging": "*.staging.internal", "apps": "*.internal"}
+    assert {t["sectionName"] for t in sp["targetRefs"]} == {"admin", "test", "staging", "apps"}
+    assert set(read(ROOT / "infrastructure/certificates/resources.yaml")[-1]["spec"]["dnsNames"]) == {
+        "*.internal", "*.admin.internal", "*.test.internal", "*.staging.internal"}
+    assert client["redirectUris"] == ["https://longhorn.admin.internal/oauth2/callback"]
+    assert not any("public-exposure" in p["spec"]["path"] for p in phases), "Public exposure must remain opt-in"
+    for p in (ROOT / "infrastructure").rglob("*.yaml"):
+        assert not any(d.get("kind") == "Gateway" and d["metadata"]["name"] == "public" for d in read(p))
     assert by_name["routes"]["spec"]["dependsOn"] == [{"name": "access"}]
     assert by_name["access"]["spec"]["healthCheckExprs"]
     assert read(ROOT / "infrastructure/controllers/releases.yaml")[0]["spec"]["values"]["persistence"]["createStorageClass"] is False

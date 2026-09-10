@@ -1,0 +1,98 @@
+# Opt-in only; source and paths refer to your separate Flux repository.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: public-certificate
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 20m
+  path: ./infrastructure/public-exposure/certificate
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: applications
+  postBuild:
+    substituteFrom:
+    - kind: ConfigMap
+      name: cluster-settings
+  dependsOn:
+  - name: controllers
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: public-edge
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 20m
+  path: ./infrastructure/public-exposure/edge
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: applications
+  postBuild:
+    substituteFrom:
+    - kind: ConfigMap
+      name: cluster-settings
+  dependsOn:
+  - name: public-certificate
+  - name: network
+  - name: admission
+  - name: identity
+  - name: authorization
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: public-access
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 20m
+  path: ./infrastructure/public-exposure/access
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: applications
+  postBuild:
+    substituteFrom:
+    - kind: ConfigMap
+      name: cluster-settings
+  dependsOn:
+  - name: public-edge
+  healthCheckExprs:
+  - apiVersion: gateway.envoyproxy.io/v1alpha1
+    kind: SecurityPolicy
+    current: has(status) && has(status.ancestors) && status.ancestors.size() > 0 && status.ancestors.all(a, a.conditions.exists(c,
+      c.type == 'Accepted' && c.status == 'True' && c.observedGeneration == metadata.generation))
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: public-routes
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 20m
+  path: ./infrastructure/public-exposure/routes
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: applications
+  postBuild:
+    substituteFrom:
+    - kind: ConfigMap
+      name: cluster-settings
+  dependsOn:
+  - name: public-access
+  - name: access

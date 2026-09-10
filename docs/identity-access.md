@@ -42,7 +42,7 @@ Find your user UUID (`sub`) in Keycloak's `elektro` realm. Prepare this request 
 {
   "writes": {
     "tuple_keys": [
-      {"user": "principal:KEYCLOAK_USER_UUID", "relation": "access", "object": "service:longhorn.apps.YOUR_DOMAIN"}
+      {"user": "principal:KEYCLOAK_USER_UUID", "relation": "access", "object": "service:longhorn.admin.internal"}
     ]
   }
 }
@@ -58,7 +58,7 @@ curl --fail-with-body --header @local/openfga.header --header 'Content-Type: app
   --data-binary @local/first-grant.json "http://127.0.0.1:8080/stores/$FGA_STORE_ID/write"
 ```
 
-For a group, write `principal:UUID member group:platform-admins` and then `group:platform-admins#member access service:longhorn.apps.YOUR_DOMAIN`. Keycloak groups and OpenFGA groups are intentionally separate stores; nothing here falsely claims to synchronize them. Manage membership through OpenFGA's documented API/CLI or your future application's lifecycle. Back up the OpenFGA database. Do not store production user membership lists in this public repository.
+For a group, write `principal:UUID member group:platform-admins` and then `group:platform-admins#member access service:longhorn.admin.internal`. Keycloak groups and OpenFGA groups are intentionally separate stores; nothing here falsely claims to synchronize them. Manage membership through OpenFGA's documented API/CLI or your future application's lifecycle. Back up the OpenFGA database. Do not store production user membership lists in this public repository.
 
 ## Local users and Google
 
@@ -68,17 +68,21 @@ The realm ConfigMap is a **first-start import**. Keycloak skips importing an alr
 
 ## Dynamic projects and routing
 
+The future internal developer platform and its applications belong in a separate Flux repository. This base supplies existing identity, routing and authorization infrastructure only. Use [the naming contract](domains.md) for test/staging/production routes.
+
 Use one `elektro` realm with clients, groups/organizations and OpenFGA objects for most projects. A Keycloak client or organization is not a Kubernetes Service. Creating one cannot automatically deploy an application or grant traffic. A new project needs:
 
-1. An application Service and workload, and either an exact HTTPRoute or a wildcard HTTPRoute for an existing multi-tenant application. Copy `examples/protected-app/` into a reconciled directory.
+1. An application Service and workload, and an exact HTTPRoute on the correct `apps`, `admin`, `test` or `staging` listener. Copy `examples/protected-app/` into a reconciled directory.
 2. An **exact** `https://HOST/oauth2/callback` registered on the `elektro-edge` Keycloak client. Preserve existing callbacks when updating the list using the Admin API. The gateway uses the requesting hostname and host-only cookies; it does not share a bearer cookie over all sibling domains. Do not register `*` or claim Keycloak supports arbitrary hostname wildcards.
-3. Explicit OpenFGA grants on `service:HOST`. Wildcard DNS/certificates/routes do not create wildcard permission grants. An unprovisioned tenant hostname has no access.
+3. Explicit OpenFGA grants on `service:HOST`. Wildcard DNS/certificates do not create routes or wildcard permission grants. An unprovisioned tenant hostname has no access.
 
-Routes automatically inherit the apps listener policy. Authentication is not duplicated in every HTTPRoute. The native Kubernetes guard rejects routes outside `edge`, the wrong parent listener, raw ingress/TCP routes and security-policy overrides. Route authors are trusted platform automation; application namespaces do not get those permissions.
+Routes automatically inherit the selected protected listener's policy. Authentication is not duplicated in every HTTPRoute. The native Kubernetes guard rejects routes outside `edge`, the wrong parent listener, raw ingress/TCP routes and security-policy overrides. Route authors are trusted platform automation; application namespaces do not get those permissions.
 
-An application with a genuine native OIDC integration may be added as an explicit reviewed exception, following the Keycloak pattern: a separate exact-host listener and matching route/backend allowlist in `infrastructure/admission/guards.yaml`, plus its own audience, callback and native access checks. Update the two-listener guard at the same time. This deliberate change is necessary: simply adding an “auth disabled” annotation is not a safe native-auth exemption. Keep default applications on the protected listener.
+An application with a genuine native OIDC integration may be added as an explicit reviewed exception, following the Keycloak pattern: a separate exact-host listener and matching route/backend allowlist in `infrastructure/admission/guards.yaml`, plus its own audience, callback and native access checks. Update the listener guard and certificates at the same time. This deliberate change is necessary: simply adding an “auth disabled” annotation is not a safe native-auth exemption. Keep default applications on the protected listener.
 
 Multiple independent Keycloak realms have different issuers. They need explicit trusted issuer/audience policies; never choose a JWKS URL or issuer from unvalidated client input. For most dynamic projects, avoid creating a realm per project and use the single issuer design above.
+
+Public aliases are independent permission targets: `service:foo.internal` and `service:fuzzy.elektrorecykling.pl` need deliberate grants, even when they share a backend. Public routes also need an exact host entry in the optional public AuthConfig. The issuer defaults to `https://keycloak.admin.internal/realms/elektro`; internet users require a reachable canonical issuer, as described in [public exposure](../examples/public-exposure/README.md). Existing realm imports and sessions do not migrate automatically when hostnames change.
 
 ## Agents, delegation and resource gateways
 

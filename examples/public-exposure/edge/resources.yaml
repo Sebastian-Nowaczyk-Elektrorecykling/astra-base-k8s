@@ -1,7 +1,7 @@
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:
-  name: platform
+  name: public
   namespace: edge
 spec:
   provider:
@@ -11,7 +11,7 @@ spec:
         replicas: 1
       envoyService:
         annotations:
-          lbipam.cilium.io/ips: ${EDGE_IP}
+          lbipam.cilium.io/ips: ${PUBLIC_EDGE_IP}
         externalTrafficPolicy: Cluster
         allocateLoadBalancerNodePorts: false
   filterOrder:
@@ -23,80 +23,43 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
-  name: platform
+  name: public
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
   parametersRef:
     group: gateway.envoyproxy.io
     kind: EnvoyProxy
-    name: platform
+    name: public
     namespace: edge
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: platform
+  name: public
   namespace: edge
 spec:
-  gatewayClassName: platform
+  gatewayClassName: public
   listeners:
   - name: identity
-    hostname: keycloak.admin.internal
+    hostname: ${IDENTITY_HOST}
     port: 443
     protocol: HTTPS
     tls:
       mode: Terminate
       certificateRefs:
       - kind: Secret
-        name: edge-tls
-    allowedRoutes:
-      namespaces:
-        from: Same
-  - name: admin
-    hostname: '*.admin.internal'
-    port: 443
-    protocol: HTTPS
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - kind: Secret
-        name: edge-tls
-    allowedRoutes:
-      namespaces:
-        from: Same
-  - name: test
-    hostname: '*.test.internal'
-    port: 443
-    protocol: HTTPS
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - kind: Secret
-        name: edge-tls
-    allowedRoutes:
-      namespaces:
-        from: Same
-  - name: staging
-    hostname: '*.staging.internal'
-    port: 443
-    protocol: HTTPS
-    tls:
-      mode: Terminate
-      certificateRefs:
-      - kind: Secret
-        name: edge-tls
+        name: public-edge-tls
     allowedRoutes:
       namespaces:
         from: Same
   - name: apps
-    hostname: '*.internal'
     port: 443
     protocol: HTTPS
     tls:
       mode: Terminate
       certificateRefs:
       - kind: Secret
-        name: edge-tls
+        name: public-edge-tls
     allowedRoutes:
       namespaces:
         from: Same

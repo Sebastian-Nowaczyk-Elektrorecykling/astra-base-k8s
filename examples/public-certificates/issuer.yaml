@@ -4,7 +4,7 @@ metadata:
   name: letsencrypt-dns
 spec:
   acme:
-    email: admin@YOUR_DOMAIN
+    email: admin@elektrorecykling.pl
     server: https://acme-v02.api.letsencrypt.org/directory
     privateKeySecretRef:
       name: letsencrypt-account

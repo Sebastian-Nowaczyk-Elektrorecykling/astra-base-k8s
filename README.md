@@ -38,7 +38,21 @@ sudo bash scripts/install-k3s.sh --role hybrid --name k8s1 --ip 192.168.50.11 \
   --config local/cluster.env --init
 ```
 
-Continue with the runbook; this command alone does not install the platform. Secrets, address reservations and your domain must be supplied before deployment. The repository's `example.com` settings are intentionally examples.
+Continue with the runbook; this command alone does not install the platform. Supply secrets and LAN address reservations before deployment. Internal DNS uses the fixed `.internal` scheme described below; keep your actual API and load-balancer addresses in the settings file.
+
+## DNS and exposure
+
+| Purpose | Name examples | Destination |
+| --- | --- | --- |
+| LAN machines | `k8s1.hosts.internal`, `k8s2.hosts.internal`, `k8s3.hosts.internal` | Each machine's LAN IP |
+| Test deployments | `foo-a7c92e.test.internal`, `foo-b41d08.test.internal` | Private gateway `EDGE_IP` |
+| Staging | `foo.staging.internal` | Private gateway `EDGE_IP` |
+| Administration | `keycloak.admin.internal`, `longhorn.admin.internal` | Private gateway `EDGE_IP` |
+| Applications / production | `foo.internal`, `bar.internal` | Private gateway `EDGE_IP` |
+
+Configure these zones on your existing LAN resolver. Wildcard DNS and certificates support new names; each deployed application still needs an exact route, callback and permission grant. The separate application-platform Flux repository owns deployment naming and lifecycle. This base adds no developer-platform components or DNS server.
+
+Internet exposure is **off by default**. An optional separate public gateway has its own IP, certificate and exact routes. `fuzzy.elektrorecykling.pl` can target the same Service as `foo.internal`; `bar.internal` remains private. Forwarding the private gateway to the Internet would defeat this boundary. See [DNS and migration](docs/domains.md) and [explicit public exposure](examples/public-exposure/README.md).
 
 ## Storage defaults
 
@@ -52,9 +66,9 @@ The chart does not create its own StorageClass. Kyverno mutates **CNPG Cluster r
 
 ## Access defaults
 
-`https://longhorn.apps.YOUR_DOMAIN` requires Keycloak login **and** an OpenFGA `service:<hostname>#access` grant. No grants are installed automatically. Keycloak itself is the explicit native-authentication exception at `https://id.YOUR_DOMAIN`; putting the login service behind its own login requirement would create a loop. Databases, the Kubernetes API and cluster management protocols use their native credentials and network boundaries.
+`https://longhorn.admin.internal` requires Keycloak login **and** an OpenFGA `service:<hostname>#access` grant. No grants are installed automatically. Keycloak itself is the explicit native-authentication exception at `https://keycloak.admin.internal`; putting the login service behind its own login requirement would create a loop. Databases, the Kubernetes API and cluster management protocols use their native credentials and network boundaries.
 
-Routes are centrally managed in `edge`. New application routes inherit the apps listener's security policy. Kubernetes admission blocks NodePort/extra LoadBalancer services, external IPs, alternate ingress APIs and per-route security overrides. Cilium blocks direct ingress into application pods and restricts the Longhorn UI, identity and authorization services. Kubernetes administrators, node root access and permission to port-forward are trusted infrastructure administration paths.
+Routes are centrally managed in `edge`. New application routes inherit their selected internal listener's security policy. Kubernetes admission blocks NodePort/extra LoadBalancer services, external IPs, alternate ingress APIs and per-route security overrides. Cilium blocks direct ingress into application pods and restricts the Longhorn UI, identity and authorization services. Kubernetes administrators, node root access and permission to port-forward are trusted infrastructure administration paths.
 
 The default is for a trusted private LAN; cluster-internal identity requests use restricted Service endpoints. Cilium encrypts pod traffic between nodes. Do not expose node management ports to the Internet. Application egress remains allowed: this is not a complete hostile multitenancy sandbox.
 
@@ -68,4 +82,4 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 - [Validation and security acceptance checks](docs/validation.md)
 - [Upstream release pins and references](docs/upstream.md)
 
-The `examples/` directory is **not reconciled**. It contains a CNPG cluster, a protected application route, a GPU smoke job, optional kube-vip reconciliation, public certificates and backup examples. Enable only the pieces you need. Flux infrastructure namespaces and their RBAC are reserved for platform administrators; do not grant applications namespace-admin access there.
+The `examples/` directory is **not reconciled**. It contains a CNPG cluster, a protected application route, a GPU smoke job, optional kube-vip reconciliation, public certificates, explicit public exposure and backup examples. Enable only the pieces you need. Flux infrastructure namespaces and their RBAC are reserved for platform administrators; do not grant applications namespace-admin access there.

@@ -1,0 +1,76 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: public-identity
+  namespace: edge
+  labels:
+    elektro.local/exposure: public
+spec:
+  parentRefs:
+  - name: public
+    sectionName: identity
+  hostnames:
+  - ${IDENTITY_HOST}
+  rules:
+  - backendRefs:
+    - name: keycloak
+      namespace: identity
+      port: 8080
+    matches:
+    - path:
+        type: PathPrefix
+        value: /realms/elektro
+    - path:
+        type: PathPrefix
+        value: /resources
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: foo
+  namespace: edge
+spec:
+  parentRefs:
+  - name: platform
+    sectionName: apps
+  hostnames:
+  - foo.internal
+  rules:
+  - backendRefs:
+    - name: foo
+      namespace: app-foo
+      port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: public-foo
+  namespace: edge
+  labels:
+    elektro.local/exposure: public
+spec:
+  parentRefs:
+  - name: public
+    sectionName: apps
+  hostnames:
+  - fuzzy.elektrorecykling.pl
+  rules:
+  - backendRefs:
+    - name: foo
+      namespace: app-foo
+      port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: edge-foo
+  namespace: app-foo
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: edge
+  to:
+  - group: ''
+    kind: Service
+    name: foo

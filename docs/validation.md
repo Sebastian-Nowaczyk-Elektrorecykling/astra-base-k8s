@@ -14,10 +14,12 @@ The Debian jobs also exercise `configure-cluster.sh` with a nondefault API IP an
 
 These checks do not exercise physical Debian installation, Cilium's real LAN/ARP/WireGuard behavior, Longhorn iSCSI and disk recovery, browser sessions, Google credentials, GPU drivers, or a complete production cluster. Complete the following acceptance checks on your hardware before relying on the foundation.
 
+The routing tests exercise all four internal groups, randomized test names, reserved host names, wildcard rejection, disabled public exposure, explicit external aliases and public identity path restrictions against the API server's actual CEL admission policies. These are configuration/admission checks; public DNS, NAT, TLS and live HTTP routing still need the deployment acceptance checks below.
+
 ## Access checks
 
 ```sh
-bash scripts/verify-access.sh longhorn.apps.YOUR_DOMAIN local/platform-ca.crt
+bash scripts/verify-access.sh longhorn.admin.internal local/platform-ca.crt
 ```
 
 | Scenario | Required result |
@@ -34,6 +36,12 @@ bash scripts/verify-access.sh longhorn.apps.YOUR_DOMAIN local/platform-ca.crt
 | Direct pod/ClusterIP access, including Longhorn backend API, from ordinary application namespace | Denied by Cilium |
 | New NodePort, extra LoadBalancer, externalIPs, raw Ingress or alternate route | Admission rejected |
 | Route-level SecurityPolicy override or reusing identity listener for Longhorn | Admission rejected |
+| Two unique test routes with independent callbacks and grants | Both work independently; an unregistered third name has no backend access |
+| Public route with an internal hostname, wildcard, or missing exposure label | Admission rejected |
+| Before public opt-in | No public Gateway or NAT rule exists |
+| After public opt-in: `foo.internal` and `bar.internal` via public IP (explicit SNI/Host) | No private application data; public gateway must not route them |
+| Exact approved public alias with callback and grant | Same intended backend as its private name |
+| Public login host `/admin`, `/realms/master`, `/health`, `/metrics` | No Keycloak backend response |
 
 For outage testing, use a maintenance window. Record the current replicas, temporarily scale Authorino to zero, and make an **authenticated** request (an anonymous request may merely receive a login redirect). It must return 5xx/denial, never the dashboard. Restore the Deployment and wait for Ready. Repeat for OpenFGA. Flux may restore the replica count during the test; suspend only that Kustomization for the brief test if needed, then resume it. Do not disable auth or admission to perform the test.
 

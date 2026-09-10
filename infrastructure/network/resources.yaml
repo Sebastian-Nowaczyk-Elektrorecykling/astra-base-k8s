@@ -7,8 +7,12 @@ spec:
   - start: ${LB_START}
     stop: ${LB_STOP}
   serviceSelector:
-    matchLabels:
-      gateway.envoyproxy.io/owning-gateway-name: platform
+    matchExpressions:
+    - key: gateway.envoyproxy.io/owning-gateway-name
+      operator: In
+      values:
+      - platform
+      - public
 ---
 apiVersion: cilium.io/v2alpha1
 kind: CiliumL2AnnouncementPolicy
@@ -16,8 +20,12 @@ metadata:
   name: lan
 spec:
   serviceSelector:
-    matchLabels:
-      gateway.envoyproxy.io/owning-gateway-name: platform
+    matchExpressions:
+    - key: gateway.envoyproxy.io/owning-gateway-name
+      operator: In
+      values:
+      - platform
+      - public
   interfaces:
   - ${LAN_INTERFACE_REGEX}
   externalIPs: false

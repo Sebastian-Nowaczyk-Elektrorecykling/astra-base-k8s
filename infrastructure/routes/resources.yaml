@@ -8,7 +8,7 @@ spec:
   - name: platform
     sectionName: identity
   hostnames:
-  - id.${BASE_DOMAIN}
+  - keycloak.admin.internal
   rules:
   - backendRefs:
     - name: keycloak
@@ -38,9 +38,9 @@ metadata:
 spec:
   parentRefs:
   - name: platform
-    sectionName: apps
+    sectionName: admin
   hostnames:
-  - longhorn.apps.${BASE_DOMAIN}
+  - longhorn.admin.internal
   rules:
   - backendRefs:
     - name: longhorn-frontend

@@ -294,7 +294,7 @@ spec:
   healthCheckExprs:
   - apiVersion: gateway.envoyproxy.io/v1alpha1
     kind: SecurityPolicy
-    current: has(status) && has(status.ancestors) && status.ancestors.exists(a, a.conditions.exists(c,
+    current: has(status) && has(status.ancestors) && status.ancestors.size() >= 4 && status.ancestors.all(a, a.conditions.exists(c,
       c.type == 'Accepted' && c.status == 'True' && c.observedGeneration == metadata.generation))
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1

@@ -1,7 +1,6 @@
 apiVersion: v1
 data:
   API_HOST: 192.168.2.153
-  BASE_DOMAIN: example.com
   EDGE_IP: 192.168.50.240
   FGA_MODEL_ID: NOT_CONFIGURED
   FGA_STORE_ID: NOT_CONFIGURED
@@ -10,6 +9,8 @@ data:
   LB_STOP: 192.168.50.249
   PG_IMAGE: ghcr.io/cloudnative-pg/postgresql:17.11-standard-trixie
   POD_CIDR: 10.42.0.0/16
+  IDENTITY_HOST: keycloak.admin.internal
+  PUBLIC_EDGE_IP: NOT_CONFIGURED
 kind: ConfigMap
 metadata:
   name: cluster-settings

@@ -73,6 +73,7 @@ secrets-encryption: true
 write-kubeconfig-mode: "0600"
 tls-san:
   - "$API_HOST"
+  - "$node_name.hosts.internal"
 etcd-snapshot-schedule-cron: "0 */6 * * *"
 etcd-snapshot-retention: 12
 EOF

@@ -13,10 +13,11 @@ Reserve, for example:
 | Optional future API VIP | `192.168.50.10` (outside service pool) |
 | Cilium service pool | `192.168.50.240`–`.249`, outside DHCP |
 | Gateway IP | `192.168.50.240` |
-| DNS | `id.YOUR_DOMAIN` and `*.apps.YOUR_DOMAIN` → gateway IP |
+| Application DNS | `*.internal`, `*.admin.internal`, `*.test.internal`, `*.staging.internal` → private gateway IP |
+| Machine DNS | `k8s1.hosts.internal`, `k8s2.hosts.internal`, `k8s3.hosts.internal` → each machine's LAN IP |
 | Pod / Service CIDRs | `10.42.0.0/16` / `10.43.0.0/16` |
 
-Change `clusters/laptops/settings.yaml`. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Set up DNS on a resolver your laptops **and client machines** use. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. For routed networks use Cilium BGP instead, as a reviewed replacement of the L2 policy.
+Change the LAN addresses in `clusters/laptops/settings.yaml`. Keep `IDENTITY_HOST: keycloak.admin.internal` and `PUBLIC_EDGE_IP: NOT_CONFIGURED` for the private setup. Follow [the DNS scheme](domains.md), including reserving `hosts.internal` on your resolver. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Set up DNS on a resolver your laptops **and client machines** use. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. For routed networks use Cilium BGP instead, as a reviewed replacement of the L2 policy.
 
 Copy `bootstrap/cluster.env.example` to `local/cluster.env` on each host and the administrator workstation. Set the reachable API address there. `bootstrap-cilium.sh` copies `API_HOST` and `POD_CIDR` into `clusters/laptops/settings.yaml` before installing Cilium. All servers must receive identical critical k3s options. CIDRs must not overlap LAN/VPN networks. Do not change them on a running cluster.
 
@@ -81,7 +82,7 @@ kubectl get nodes -o wide
 
 The normal Helm release is installed once to solve the CNI/bootstrap dependency. Flux later reconciles that same release, namespace, version and shared values file. There is no k3s HelmChart resource racing Flux. Do not re-enable Flannel, kube-proxy, Traefik, ServiceLB or local-path storage.
 
-Review the settings file updated by this step and include it in the commit below. Flux cannot read your ignored `local/cluster.env`: it uses `API_HOST` from the tracked settings ConfigMap. For later address changes, run `bash scripts/configure-cluster.sh local/cluster.env`, then commit and push the resulting settings change. The helper only copies the shared API address and pod CIDR; configure your domain, load-balancer addresses and other platform values in `settings.yaml`.
+Review the settings file updated by this step and include it in the commit below. Flux cannot read your ignored `local/cluster.env`: it uses `API_HOST` from the tracked settings ConfigMap. For later address changes, run `bash scripts/configure-cluster.sh local/cluster.env`, then commit and push the resulting settings change. The helper only copies the shared API address and pod CIDR; configure load-balancer addresses and other platform values in `settings.yaml`.
 
 If Flux already manages Cilium, the bootstrap script stops before running Helm against that managed release. Use [Cilium API-address recovery](cilium-api-recovery.md) if pods are already connecting to the wrong server.
 
@@ -124,16 +125,16 @@ Empty/missing secrets leave dependent pods unready. Missing FGA store/model IDs 
 
 ## 5. Trust TLS, initialize permissions, log in
 
-The default cert-manager issuer creates a private root and a certificate for the identity host and application wildcard. Export **only its public certificate**:
+The default cert-manager issuer creates a private root and a certificate with all four internal application wildcards, including the administration group. Export **only its public certificate**:
 
 ```sh
 kubectl -n cert-manager get secret platform-root-ca -o jsonpath='{.data.ca\.crt}' \
   | base64 --decode > local/platform-ca.crt
 ```
 
-Install this public CA in each client OS/browser trust store using your normal administration process. Do not use `curl -k` or turn off certificate validation. For public certificates, use the DNS-01 example and change the edge Certificate issuer; do not run two issuers against the same secret. OIDC token/JWKS calls stay on restricted cluster Service endpoints so private-root trust is not a bootstrap dependency for the gateway controllers.
+Install this public CA in each client OS/browser trust store using your normal administration process. Do not use `curl -k` or turn off certificate validation. Internal names keep the private CA. Optional public exposure uses a separate public certificate and gateway; follow [the opt-in procedure](../examples/public-exposure/README.md). OIDC token/JWKS calls stay on restricted cluster Service endpoints so private-root trust is not a bootstrap dependency for the gateway controllers.
 
-Visit `https://id.YOUR_DOMAIN/admin`. Retrieve the initial bootstrap-admin password from your encrypted secret using your secure local tools. Create a permanent, MFA-protected admin account in the master realm, verify it, then remove the temporary bootstrap administrator. Create an `elektro` realm user with a password (and preferably MFA). Realm import creates no human user and enables no public registration.
+Visit `https://keycloak.admin.internal/admin`. Retrieve the initial bootstrap-admin password from your encrypted secret using your secure local tools. Create a permanent, MFA-protected admin account in the master realm, verify it, then remove the temporary bootstrap administrator. Create an `elektro` realm user with a password (and preferably MFA). Realm import creates no human user and enables no public registration.
 
 Continue with [OpenFGA initialization and the first grant](identity-access.md#initialize-openfga). After the first grant, Longhorn will be accessible through the protected host. Run the access acceptance checks before using real data.
 
@@ -151,7 +152,7 @@ Configure your existing host/router firewall; the preparation script does not re
 | UDP 51871 | Cluster nodes ↔ cluster nodes, Cilium WireGuard |
 | TCP 4240, ICMP | Cluster nodes ↔ cluster nodes, Cilium health |
 | TCP 4244 | Hubble relay / trusted nodes → Cilium agents |
-| TCP 443 | Clients → gateway IP |
+| TCP 443 | LAN/VPN clients → private `EDGE_IP`; Internet clients → separate `PUBLIC_EDGE_IP` only after explicit opt-in |
 | DNS/NTP/HTTPS egress | Nodes/pods → your resolvers, time service, registries and Git/chart sources |
 
 Longhorn also needs its documented internal manager/engine/replica traffic between cluster nodes; permit trusted cluster-node traffic on the private LAN, or derive a full host firewall allowlist from the pinned Longhorn release before restricting it. Do not present the above as an exhaustive Longhorn firewall policy. The external boundary must not expose these internal ports or the full NodePort range.
