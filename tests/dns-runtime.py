@@ -69,8 +69,9 @@ try:
         containers.append(k3s)
 
         def kube(*args, input=None):
-            # The upstream scratch image's PATH need not contain /bin.
-            return subprocess.check_output(['docker', 'exec', '-i', k3s, '/bin/k3s', 'kubectl',
+            # The container contains the server multicall binary; invoke its kubectl
+            # symlink directly (the downloadable host binary has a different wrapper).
+            return subprocess.check_output(['docker', 'exec', '-i', k3s, '/bin/kubectl',
                                             '--kubeconfig=/etc/rancher/k3s/k3s.yaml',
                                             '--request-timeout=10s', *args],
                                            input=input, text=True, stderr=subprocess.PIPE)
