@@ -214,6 +214,7 @@ spec:
           default_home_dashboard_path: /tmp/dashboards/k8s-resources-cluster.json
       rbac:
         namespaced: true
+        useExistingRole: grafana-dashboards
       defaultDashboardsEditable: false
       sidecar:
         resources:

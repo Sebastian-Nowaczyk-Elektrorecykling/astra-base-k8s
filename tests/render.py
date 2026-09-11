@@ -11,6 +11,10 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
+# Upstream monitoring CRD enums contain a bare '=' scalar. PyYAML's YAML 1.1
+# resolver tags it as 'value'; Kubernetes/Helm accept it as the literal string.
+yaml.SafeLoader.add_constructor('tag:yaml.org,2002:value', yaml.SafeLoader.construct_scalar)
+
 
 class UniqueLoader(yaml.SafeLoader):
     pass

@@ -39,6 +39,7 @@ def check_rendered():
                 assert all(not p.get('hostPort') for p in c.get('ports', []))
         if o['kind'] == 'ClusterRoleBinding':
             assert all(s.get('name') != 'grafana' for s in o.get('subjects', []))
+    assert by_key['RoleBinding', 'grafana']['roleRef']['name'] == 'grafana-dashboards'
     grafana = by_key['Deployment', 'grafana']['spec']['template']['spec']
     main = next(c for c in grafana['containers'] if c['name'] == 'grafana')
     assert {'name': 'GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION', 'value': 'true'} in main['env']
@@ -75,6 +76,9 @@ def runtime():
     context = subprocess.check_output(['kubectl', 'config', 'current-context'], text=True).strip()
     assert context == 'kind-elektro-validation', context
     run('kubectl', 'label', 'node', '--all', 'elektro.local/workloads=true', '--overwrite')
+    run('kubectl', 'apply', '-f', 'infrastructure/monitoring/rbac.yaml')
+    # The schema-validation stage preinstalled CRDs without Helm release metadata;
+    # take ownership only in this disposable CI cluster.
     run('helm', 'upgrade', '--install', 'cert-manager', '.cache/charts/cert-manager/cert-manager',
         '-n', 'cert-manager', '-f', '.cache/values/cert-manager.yaml', '--wait', '--timeout', '5m', '--take-ownership')
     values = yaml.safe_load((ROOT / '.cache/values/metrics.yaml').read_text())
