@@ -24,10 +24,11 @@ profile. For machines on the same wired LAN, the minimum is:
 2. Exclude `192.168.2.240`–`192.168.2.249` from all DHCP ranges and other static
    allocations. It is one pool exclusion, not a reservation for every worker or
    virtual IP. Verify existing leases have released those addresses before use.
-3. After DNS passes the bootstrap checks, set a workstation's resolver to
-   `192.168.2.242`. Optionally distribute it through **Services → DHCP Server →
-   View Details → DNS** for the existing LAN. Keep a separate, working resolver
-   on cluster hosts so they can boot while this cluster is absent.
+3. After DNS passes the bootstrap checks, preferably keep clients using the
+   router's DNS and add [conditional forwarding for `.internal`](dns.md#edgerouter-conditional-forwarding).
+   A single test workstation can instead use a [Windows suffix rule](windows-clients.md#option-b-one-workstation-with-a-suffix-rule)
+   or `192.168.2.242` as its resolver. Keep external DNS independent of the cluster
+   so hosts can boot while it is absent.
 
 Those addresses assume **`192.168.2.0/24`**. For a different `192.168.x.x` network,
 edit the profile to match the actual prefix/mask; `/16` is not implied by the
@@ -41,6 +42,63 @@ Do not add a public secondary DNS resolver on clients expecting internal names:
 clients may query either server. Use the cluster's `DNS_UPSTREAMS` for external
 queries. Leave WAN port forwarding and inbound access disabled. There are no
 required BGP, static service-route or per-application DNS entries for this mode.
+
+## L2 and BGP together on this LAN
+
+Both mechanisms can deliver traffic to the same Service VIP in this design.
+They operate at different points in the path; this is not two competing ARP
+responders. The following assumes the profile's pool is on the nodes' wired LAN
+and the client's actual subnet mask/routes agree with the router:
+
+| Client path | BGP off | BGP established |
+| --- | --- | --- |
+| Windows on the VIP's subnet | ARP selects the L2 lease holder | Still ARP to the L2 holder; normally bypasses the router |
+| Router itself, including forwarded DNS queries | Connected LAN route, then ARP for the VIP | More-specific `/32` selects a controller next hop |
+| Allowed client on another VLAN/VPN | Router's connected LAN route, then ARP | Router's BGP `/32`, then the selected controller |
+
+L2 may select a worker while BGP selects a controller. Both can forward to any
+ready Service backend: keep `externalTrafficPolicy: Cluster`, the current VXLAN
+tunnel and explicit `loadBalancer.mode: snat`. Do not set `loadBalancerClass` to
+either announcement implementation: leaving it unset allows both to select the
+Service. `Local` is incompatible with Cilium L2; a dedicated controller may have
+no local DNS/gateway pod. See [L2 requirements](https://docs.cilium.io/en/stable/network/l2-announcements/)
+and [BGP Service selection](https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane-configuration/#load-balancer-class).
+
+SNAT sends cross-node replies back through the receiving node, avoiding a direct
+server-return dependency. The backend may see a node IP; access decisions use the
+verified identity, not the original client IP. Do not introduce DSR or use backend
+source IPs as an authorization boundary without redesigning/testing that path.
+See [Cilium forwarding modes](https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/#direct-server-return-dsr).
+
+There is one significant failover trap: a stale BGP `/32` still wins over the
+connected LAN route. A working L2 holder cannot rescue router-originated/routed
+traffic until that route is withdrawn. The optional peer now requests a 9-second
+hold time and 3-second keepalive, replacing 90/30; confirm the negotiated values
+with `show ip bgp neighbors 192.168.2.153`. Graceful restart is disabled on Cilium
+to avoid retaining stale routes through a hard laptop failure. Leave stale-route
+retention disabled for these peers on the router too. These settings reduce one
+failure-detection delay; they do not promise nine-second application recovery.
+See [BGP timers](https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane-configuration/#timers)
+and [failure scenarios](https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane-operation/#failure-scenarios).
+
+With no remaining BGP route, this router can use its connected LAN route and L2
+again, provided another eligible Cilium node and the backends remain healthy.
+L2 election also requires a working Kubernetes API; one-controller loss is not
+quorum HA. Existing connections can break when their ingress node changes.
+Neither mechanism checks the whole application: `Cluster` BGP advertisements
+remain present even when the Service has no ready endpoints.
+
+Keep the pool excluded from DHCP, allow ARP/gratuitous ARP on the nodes' VLAN,
+and ensure `LAN_INTERFACE_REGEX` matches a Cilium-selected wired interface on
+every possible L2 holder. Workers joining on an unrelated VLAN are not covered
+by this single-LAN policy. Do not add a second ARP speaker or assign these VIPs to
+NICs. The optional kube-vip API address uses a separate address outside this pool.
+Wi-Fi Windows clients can use a bridged LAN if the AP permits access to these
+wired hosts; guest isolation can block it. BGP does not bypass that isolation.
+
+For a single LAN, BGP remains optional and adds little to direct workstation
+traffic. It is useful for explicit router paths and eventual routed networks;
+it does not remove DNS/CA setup or make a service Internet-accessible.
 
 ## Enable optional BGP in one profile
 
@@ -169,8 +227,15 @@ dig @192.168.2.242 k8s2.hosts.internal +short
 ```
 
 A same-subnet DNS/HTTPS test may use L2 directly; it does not prove BGP works.
-Verify the router's selected routes and test from an allowed routed client if
-available. For three controllers, test one peer failing and route replacement.
+If using router conditional DNS, query both `@192.168.2.242` and `@192.168.2.1`;
+the router's upstream lookup exercises its selected VIP route. Verify the router's
+selected routes and test HTTPS from an allowed routed client if available.
+In a maintenance window with surviving API quorum/backends, compare new requests
+from same-subnet and routed clients while one peer/holder is lost. Observe route
+withdrawal, the replacement next hop (or connected-route fallback), L2 lease
+movement and recovery independently. A graceful BGP shutdown alone does not test
+a silent node failure. Restore the node/peer and confirm only the intended two
+prefixes are learned. See [Windows acceptance](windows-clients.md#verify-and-troubleshoot).
 Do not remove L2 or move the pool off-link as part of this optional setup. BGP
 route reachability also does not grant a routed subnet DNS access: extend DNS's
 source ranges, Cilium policy and admission together if adding another client LAN.

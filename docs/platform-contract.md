@@ -138,6 +138,16 @@ up route, callback and permission objects together in the downstream lifecycle.
 
 ## HTTP entry and identity
 
+Client prerequisites are a resolver that knows this profile's suffix, a route to
+its private gateway, and trust in its private CA. BGP does not change the names,
+VIPs or certificate trust. Use [Windows onboarding](windows-clients.md) and
+[TLS operations](tls.md); application repositories must not distribute signing
+keys, disable TLS validation or take ownership of the base wildcard Certificate.
+Routine leaf renewal is automatic; root trust distribution and recovery are
+infrastructure responsibilities. Workloads making HTTPS calls to private gateway
+names need the public root in their own supported trust mechanism too; Windows
+trust does not configure a container's trust store.
+
 An application exposes a **ClusterIP Service**, an exact-host HTTPRoute in `edge`
 with one parent/listener, and a ReferenceGrant in its own namespace naming that
 Service. Routes must directly reference Services and contain no route/backend
@@ -195,7 +205,13 @@ UDP/TCP 53 and required API/identity/registry/external flows. Ordinary egress is
 otherwise allowed. NetworkPolicy is not a service identity system and this base
 does not install a service mesh, SPIFFE identities or a hostile-tenant sandbox.
 
-Wildcard DNS/certificates cover the four application groups automatically. The
+Wildcard DNS covers all four application groups. Grouped TLS wildcards cover
+admin/test/staging and deeper profile suffixes, but common clients reject
+`*.internal` for `foo.internal`. Direct ordinary names under `.internal` need
+[exact SANs in the base-owned edge certificate](tls.md#exact-names-for-applications-directly-under-internal)
+before use. Coordinate that base profile patch alongside the downstream route;
+do not create another owner of the Certificate. Random test names need no SAN
+edit because `*.test.internal` is sufficiently deep. The
 LAN resolver uses a stable service IP, while Node records follow k3s discovery.
 Pods can resolve internal names once `cluster-dns` is ready. DNS does not install
 the private CA into clients or application containers. Distribute **only the CA's

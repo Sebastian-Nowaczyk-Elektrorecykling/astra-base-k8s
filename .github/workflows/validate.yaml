@@ -66,6 +66,7 @@ jobs:
           python tests/network-settings.py
           python tests/render.py --charts
           python tests/contracts.py --render
+          python tests/certificates.py --render
           python tests/metrics.py
       - name: Verify DNS answers, forwarding and live reloads
         run: python tests/dns-runtime.py
@@ -81,6 +82,8 @@ jobs:
         run: bash tests/authorino-startup.sh
       - name: Verify metrics startup, ingestion and Grafana authentication
         run: python tests/metrics.py --runtime
+      - name: Verify private TLS issuance, hostname matching and key renewal
+        run: python tests/certificates.py --runtime
       - name: Metrics failure diagnostics
         if: failure()
         run: |

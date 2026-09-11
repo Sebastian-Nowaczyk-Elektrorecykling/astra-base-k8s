@@ -53,7 +53,9 @@ Continue with the runbook; this command alone does not install the platform. Sup
 | Administration | `keycloak.admin.internal`, `longhorn.admin.internal`, `grafana.admin.internal` | Private gateway `EDGE_IP` |
 | Applications / production | `foo.internal`, `bar.internal` | Private gateway `EDGE_IP` |
 
-Point clients at the CoreDNS service's **LAN** `DNS_IP`, directly or through DHCP. Configure `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS` in `clusters/laptops/settings.yaml`; see [LAN DNS setup](docs/dns.md). Registered node addresses are discovered automatically from k3s; unknown machine names return NXDOMAIN. Wildcard DNS and certificates support new application names; each application still needs an exact route, callback and permission grant. The separate application-platform Flux repository owns deployment naming and lifecycle.
+Prefer keeping clients on their existing router DNS and [forwarding only `.internal`](docs/dns.md#edgerouter-conditional-forwarding) to the CoreDNS service's **LAN** `DNS_IP`. Direct client/DHCP use of `DNS_IP` also works. Configure `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS` in `clusters/laptops/settings.yaml`; see [LAN DNS setup](docs/dns.md). Registered node addresses are discovered automatically from k3s; unknown machine names return NXDOMAIN. Wildcard DNS supports new application names; each application needs an exact route, callback and permission grant. Grouped TLS wildcards cover random tests and admin/staging names; direct `foo.internal` names also need [an exact certificate SAN](docs/tls.md#exact-names-for-applications-directly-under-internal). The separate application-platform Flux repository owns deployment naming and lifecycle.
+
+[Windows clients](docs/windows-clients.md) use the same DNS and private-root trust with BGP on or off. Keep L2 enabled for this on-link IP pool. [Private TLS operations](docs/tls.md) covers CA export, renewal and trust after a rebuild; public CAs cannot issue for `.internal`.
 
 Internet exposure is **off by default**. An optional separate public gateway has its own IP, certificate and exact routes. `fuzzy.elektrorecykling.pl` can target the same Service as `foo.internal`; `bar.internal` remains private. Forwarding the private gateway to the Internet would defeat this boundary. See [Internal domains](docs/domains.md) and [explicit public exposure](examples/public-exposure/README.md).
 
@@ -83,6 +85,8 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 - [Bootstrap](docs/bootstrap.md)
 - [Cluster settings, DHCP and multiple clusters](docs/clusters.md)
 - [LAN DNS](docs/dns.md)
+- [Windows DNS, ordinary browsers and CA trust](docs/windows-clients.md)
+- [Private TLS, certificates and root recovery](docs/tls.md)
 - [EdgeRouter and optional BGP](docs/bgp.md)
 - [Rebuild laptops from scratch](docs/rebuild.md)
 - [Metrics, Grafana access and retention](docs/monitoring.md)

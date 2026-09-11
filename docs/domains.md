@@ -27,8 +27,12 @@ For tests, the separate application platform can allocate `APP-RANDOM.test.inter
 
 For staging, start with a deliberate name such as `foo.staging.internal`; an additional candidate can use `foo-candidate.staging.internal`. Renaming is supported by adding the new exact route/callback/grants, migrating users, and retiring the old entries. Production uses a selected name such as `foo.internal`. All groups inherit the same fail-closed login/permission policy. Sibling cookies are host-only; staging/test do not acquire production grants.
 
-Gateway API wildcard hostname matching can span multiple labels, while TLS wildcard certificates cover a single label. The admission policy therefore enforces the group and label depth on every route. Certificates include all four wildcards rather than assuming `*.internal` also covers `foo.test.internal`. See the [Gateway API hostname specification](https://gateway-api.sigs.k8s.io/docs/concepts/hostnames/).
+Gateway API wildcard hostname matching can span multiple labels, while TLS wildcard certificates cover a single label. The admission policy therefore enforces the group and label depth on every route. The grouped wildcards cover admin/test/staging. Common TLS clients reject a top-level `*.internal` wildcard for `foo.internal`; use [exact base-certificate SANs](tls.md#exact-names-for-applications-directly-under-internal) for those ordinary application names. The ordinary wildcard works for a deeper profile suffix such as `production.internal`. See the [Gateway API hostname specification](https://gateway-api.sigs.k8s.io/docs/concepts/hostnames/).
 
 The application platform's Flux reconciliation should depend on the base `access` Kustomization before adding routes. Its lifecycle integration uses Keycloak/OpenFGA's supported APIs; changing identity records alone does not create Kubernetes routes. Keep those deployment/platform resources in its own repository. Access to `edge`, ReferenceGrants and identity administration is a trusted platform permission, not a permission for arbitrary application pods.
 
 Internet access is a separate, explicit configuration change; see [public exposure](../examples/public-exposure/README.md).
+
+[Windows client setup](windows-clients.md) covers DNS and browser trust for these
+names. [The TLS runbook](tls.md) describes private-root distribution, wildcard
+coverage, renewal and recovery; DNS/BGP changes do not establish certificate trust.

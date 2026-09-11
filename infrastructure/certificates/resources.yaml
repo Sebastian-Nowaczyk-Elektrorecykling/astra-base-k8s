@@ -17,6 +17,9 @@ spec:
   duration: 87600h
   renewBefore: 8760h
   privateKey:
+    # Client trust distribution is manual; routine renewal must retain this key.
+    # This does not extend the lifetime of roots already installed on clients.
+    rotationPolicy: Never
     algorithm: ECDSA
     size: 256
   issuerRef:
@@ -38,12 +41,18 @@ metadata:
   namespace: edge
 spec:
   secretName: edge-tls
+  duration: 2160h
+  renewBefore: 720h
   dnsNames:
+  # A top-level *.internal wildcard is rejected by common TLS clients. Profiles
+  # using that suffix add exact ordinary-app SANs; see docs/tls.md. The grouped
+  # wildcards below work, as does *.production.internal for a deeper profile.
   - '*.${INTERNAL_DOMAIN}'
   - '*.admin.${INTERNAL_DOMAIN}'
   - '*.test.${INTERNAL_DOMAIN}'
   - '*.staging.${INTERNAL_DOMAIN}'
   privateKey:
+    rotationPolicy: Always
     algorithm: ECDSA
     size: 256
   issuerRef:

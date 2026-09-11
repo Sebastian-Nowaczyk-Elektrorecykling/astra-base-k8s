@@ -16,6 +16,10 @@ repository; a reference to `main` is documentation, not a compatibility pin.
   ClusterIP Services and narrowly named ReferenceGrants. No alternate ingress,
   NodePort, public exposure, native-auth exemption, route filters or security
   override without an explicit base design change.
+- For direct `foo.internal` names, coordinate an exact SAN in the base profile's
+  `edge-tls` Certificate; common TLS clients reject `*.internal`. Grouped test,
+  staging and admin names use the existing deeper wildcards. Never co-own the
+  base Certificate or distribute its signing/private key.
 - Preserve verified subject handling. Keycloak callbacks, OpenFGA service grants,
   and business authorization are separate responsibilities. Do not infer grants
   from login, email or a client-provided subject. Never distribute administrative

@@ -25,9 +25,12 @@ metadata:
   name: lan-router
 spec:
   timers:
-    connectRetryTimeSeconds: 10
-    holdTimeSeconds: 90
-    keepAliveTimeSeconds: 30
+    connectRetryTimeSeconds: 5
+    # A stale /32 wins over the connected LAN route even if L2 has recovered.
+    holdTimeSeconds: 9
+    keepAliveTimeSeconds: 3
+  gracefulRestart:
+    enabled: false
   families:
   - afi: ipv4
     safi: unicast

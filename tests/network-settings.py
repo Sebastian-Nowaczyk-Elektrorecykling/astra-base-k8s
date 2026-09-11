@@ -85,4 +85,24 @@ assert not advertised('envoy-gateway-system', 'envoy-public', **{
 assert not advertised('kube-system', 'kube-dns')
 assert not advertised('app-demo', 'lan-dns')
 assert not advertised('monitoring', 'grafana')
-print('LAN prefixes, pool/API conflicts, BGP opt-in and private-only service advertisements passed.')
+
+# Same on-link VIPs must remain selectable by both announcement implementations.
+# A Local service or a class dedicated to either speaker silently breaks one path.
+cilium = yaml.safe_load((ROOT / 'infrastructure/cilium/values.yaml').read_text())
+assert cilium['kubeProxyReplacement'] is True
+assert cilium['l2announcements']['enabled'] is True
+assert cilium['routingMode'] == 'tunnel' and cilium['tunnelProtocol'] == 'vxlan'
+assert cilium['loadBalancer']['mode'] == 'snat'
+dns = next(obj for obj in yaml.safe_load_all((ROOT / 'infrastructure/dns/resources.yaml').read_text())
+           if obj['kind'] == 'Service')['spec']
+edge = next(obj for obj in yaml.safe_load_all((ROOT / 'infrastructure/edge/resources.yaml').read_text())
+            if obj['kind'] == 'EnvoyProxy')['spec']['provider']['kubernetes']['envoyService']
+for service in (dns, edge):
+    assert service['externalTrafficPolicy'] == 'Cluster'
+    assert not service.get('loadBalancerClass'), 'A dedicated class prevents dual L2/BGP selection'
+# Bound stale /32 retention; a healthy L2 speaker does not override a BGP route.
+timers = peer['spec']['timers']
+assert 3 <= timers['holdTimeSeconds'] <= 15
+assert 1 <= timers['keepAliveTimeSeconds'] <= timers['holdTimeSeconds'] // 3
+assert peer['spec']['gracefulRestart']['enabled'] is False
+print('LAN prefixes, pool/API conflicts, BGP opt-in/selectors and L2/BGP forwarding constraints passed.')

@@ -1,0 +1,21 @@
+# BASE profile patch, not a standalone resource or a downstream-owned Certificate.
+# Copy to clusters/NAME/certificate-names.yaml, list exact application names here,
+# and include via the profile kustomization.yaml's patches (not resources).
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: certificates
+  namespace: flux-system
+spec:
+  patches:
+  - target:
+      group: cert-manager.io
+      version: v1
+      kind: Certificate
+      name: edge-tls
+      namespace: edge
+    patch: |-
+      - op: add
+        path: /spec/dnsNames/-
+        value: demo.${INTERNAL_DOMAIN}
+      # Add further exact names with another add operation; retain existing ones.

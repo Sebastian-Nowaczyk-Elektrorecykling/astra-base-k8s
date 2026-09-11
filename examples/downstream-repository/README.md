@@ -90,6 +90,14 @@ when a dependency is not Ready.
 
 ## Enable access to demo
 
+When the base profile uses `INTERNAL_DOMAIN: internal`, first add
+`demo.${INTERNAL_DOMAIN}` to the base profile's exact certificate SAN list using
+[the private application certificate patch](https://github.com/Sebastian-Nowaczyk-Elektrorecykling/astra-base-k8s/blob/main/docs/tls.md#exact-names-for-applications-directly-under-internal).
+Wait for cert-manager issuance and verify the served certificate before opening
+the URL. Common TLS clients reject `*.internal` for `demo.internal`, even with
+the root trusted. The base keeps ownership of `edge-tls`; do not copy it here.
+Deeper suffixes such as `production.internal` already have a usable wildcard.
+
 For laptops the URL is `https://demo.internal`; a profile using
 `production.internal` produces `https://demo.production.internal` without
 editing the shared route. Add that exact host's `/oauth2/callback` HTTPS URI to

@@ -1,6 +1,6 @@
 # LAN DNS
 
-The base deploys upstream **CoreDNS 1.14.7** as `kube-system/lan-dns`. Point a client machine's DNS setting at **`DNS_IP`**, or advertise that address through your router's DHCP DNS option. It answers internal names and forwards other queries to the configured upstream resolvers. TCP and UDP port 53 use the same stable Cilium LoadBalancer IP. Node records follow k3s's existing node discovery; no additional controller, web UI, database or persistent volume is installed.
+The base deploys upstream **CoreDNS 1.14.7** as `kube-system/lan-dns`. Clients can keep using the router's DNS with conditional forwarding below, point directly at **`DNS_IP`**, or receive it through DHCP. It answers internal names and forwards other queries to the configured upstream resolvers. TCP and UDP port 53 use the same stable Cilium LoadBalancer IP. Node records follow k3s's existing node discovery; no additional controller, web UI, database or persistent volume is installed.
 
 ## Configure and reconcile
 
@@ -40,6 +40,69 @@ kubectl -n kube-system get service lan-dns
 The normal Flux dependency graph performs this ordering automatically. Existing clusters do not need another Cilium/Flux bootstrap. `local/cluster.env` does not configure this service; Flux reads the tracked settings. Wait for the Service's `EXTERNAL-IP` to equal `DNS_IP`, then test it before changing client DNS. A pending IP usually means the address is outside the pool, already allocated, or the updated network resources have not reconciled.
 
 
+## EdgeRouter conditional forwarding
+
+For company workstations, the least disruptive option is to retain the router as
+their existing DHCP-provided DNS server and forward only the cluster suffix to
+CoreDNS. Public DNS then continues working while the cluster is stopped or wiped.
+This works with BGP off or on and needs no per-application records. It uses
+EdgeOS's existing dnsmasq service, not another installed DNS server.
+
+First verify `DNS_IP` directly. In the EdgeRouter CLI, inspect `show configuration commands`
+and `show dns forwarding nameservers`. Preserve the existing DNS listeners,
+upstreams, DHCP scopes and firewall. If clients already use the router for DNS,
+the only new forwarding setting is (adapt the profile's suffix and address):
+
+```text
+configure
+set service dns forwarding options server=/internal/192.168.2.242
+compare
+commit
+save
+exit
+```
+
+If DNS forwarding is not yet enabled, configure its actual trusted LAN listening
+interface under **Services → DNS → DNS Forwarding**, retain independent upstream
+resolvers, and distribute the router's LAN address through the existing DHCP
+scope's DNS option. Permit TCP/UDP 53 to the router only from intended client
+networks. Never enable a WAN DNS listener. Ubiquiti documents
+[the forwarding option, listeners and upstream choices](https://help.uisp.com/hc/en-us/articles/22591228502935-EdgeRouter-DNS-Forwarding-Setup-and-Options).
+
+The router must query `DNS_IP` using an address accepted by `DNS_CLIENT_CIDR`
+(normally its node-LAN IP, for example `192.168.2.1`). Clients of the router's
+resolver are represented by that router source address: control who may query
+the router with its own listener/firewall policy. Forwarding DNS does not grant
+their subnet HTTPS access. For direct queries from another VLAN/VPN, the existing
+cluster DNS source restrictions still apply.
+
+If the router has `stop-dns-rebind` enabled and rejects private-address answers,
+add a narrowly scoped exception with
+`set service dns forwarding options rebind-domain-ok=/internal/` inside a
+configuration session, then review/commit/save. Do not disable rebind protection
+globally. dnsmasq's [manual](https://thekelleys.org.uk/dnsmasq/docs/dnsmasq-man.html)
+describes this exception and longest-domain forwarding. Keep any broader
+`address=/internal/...` overrides out of this path: they would mask dynamic node
+answers and application groups. The base's internal zone is unsigned; do not
+impose a DNSSEC-required policy on it.
+
+For another profile such as `production.internal`, add a more-specific
+`server=/production.internal/SECOND_DNS_IP` rule, substituting the second cluster's
+actual resolver IP. The longer suffix wins; no client change is needed. This also
+keeps that profile independent of the laptops resolver. Pods and clients querying
+a cluster DNS directly still need the [inter-cluster forwarding configuration](clusters.md#two-clusters-on-the-same-lan).
+
+Keep router public upstreams independent: never make `DNS_IP` its global/default
+upstream in this arrangement. The existing public `DNS_UPSTREAMS` work unchanged.
+If choosing the router as a cluster upstream, it must forward only the private
+zone back to the cluster and resolve other names independently.
+
+Test `dig @ROUTER_IP grafana.admin.internal`, a real node name and `example.org`,
+then test the workstation's normal resolver. To undo, remove only the exact
+option you added with `delete service dns forwarding options server=/internal/192.168.2.242`
+in a configuration session, review/commit/save, and remove its rebind exception
+only if you added it and no remaining cluster needs it.
+
 ## Answers and client setup
 
 | Query | Answer |
@@ -77,7 +140,7 @@ getent ahostsv4 longhorn.admin.internal
 
 Reactivating a connection briefly interrupts it. On other operating systems use the adapter's DNS setting, or let DHCP distribute `DNS_IP`. Remove unwanted manually configured IPv6 DNS servers too. Do not add a public DNS address as a client-side “secondary”: clients can use it even while the internal resolver is healthy, causing intermittent `.internal` failures. For redundancy use another resolver serving the same internal zones. Browsers/VPNs with their own encrypted DNS must use the OS resolver or an internal-zone exception.
 
-DNS does not install the private TLS root on clients. Complete the [CA trust step](bootstrap.md#5-trust-tls-initialize-permissions-log-in) before using internal HTTPS services.
+For Windows, prefer [router DNS or a suffix-only Windows policy](windows-clients.md), with verification and removal commands. DNS does not install the private TLS root on clients. Complete the [CA trust step](bootstrap.md#5-trust-tls-initialize-permissions-log-in) before using internal HTTPS services; [private TLS operations](tls.md) explains renewal and recovery.
 
 ## Pods, updates and availability
 

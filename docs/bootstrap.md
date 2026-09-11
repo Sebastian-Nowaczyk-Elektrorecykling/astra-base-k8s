@@ -137,7 +137,7 @@ kubectl -n cert-manager get secret platform-root-ca -o jsonpath='{.data.ca\.crt}
   | base64 --decode > local/platform-ca.crt
 ```
 
-Install this public CA in each client OS/browser trust store using your normal administration process. Do not use `curl -k` or turn off certificate validation. Internal names keep the private CA. Optional public exposure uses a separate public certificate and gateway; follow [the opt-in procedure](../examples/public-exposure/README.md). OIDC token/JWKS calls stay on restricted cluster Service endpoints so private-root trust is not a bootstrap dependency for the gateway controllers.
+Install this public CA in each client's trust store. [Windows setup](windows-clients.md) gives minimally invasive DNS options and a per-user certificate import; [the TLS runbook](tls.md) includes DER export, fingerprint verification and root renewal/recovery. Do not use `curl -k` or turn off certificate validation. Internal names keep the private CA. Optional public exposure uses a separate public certificate and gateway; follow [the opt-in procedure](../examples/public-exposure/README.md). OIDC token/JWKS calls stay on restricted cluster Service endpoints so private-root trust is not a bootstrap dependency for the gateway controllers.
 
 Visit `https://keycloak.admin.internal/admin`. Retrieve the initial bootstrap-admin password from your encrypted secret using your secure local tools. Create a permanent, MFA-protected admin account in the master realm, verify it, then remove the temporary bootstrap administrator. Create an `elektro` realm user with a password (and preferably MFA). Realm import creates no human user and enables no public registration.
 
