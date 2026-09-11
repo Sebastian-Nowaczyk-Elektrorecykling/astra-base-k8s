@@ -68,7 +68,7 @@ sudo bash scripts/install-k3s.sh --role worker --name k8s2 --ip 192.168.50.12 \
   --token-file /root/k3s-join-token
 ```
 
-The nodes are expected to be NotReady until Cilium is installed. The installer refuses to overwrite an existing installation. It is for fresh nodes, not an upgrade or role-conversion tool.
+The nodes are expected to be NotReady until Cilium is installed. The installer refuses to overwrite an existing installation. It is for fresh nodes or cleaned, rebooted nodes rejoining after [the removal procedure](node-role-changes.md), not for overwriting a live installation.
 
 ## 3. Bootstrap Cilium
 

@@ -16,6 +16,8 @@ These checks do not exercise physical Debian installation, Cilium's real LAN/ARP
 
 The routing tests exercise all four internal groups, randomized test names, reserved host names, wildcard rejection, disabled public exposure, explicit external aliases and public identity path restrictions against the API server's actual CEL admission policies. These are configuration/admission checks; public DNS, NAT, TLS and live HTTP routing still need the deployment acceptance checks below.
 
+The node-maintenance CLI tests isolate API/SSH calls and cover last-server/workload protection, two- and three-server retirement ordering, Longhorn rebuild/health blockers, surviving API checks, failed drains, retained CSI attachments, read-only defaults and server-role configuration preservation. CI additionally exercises the real Kubernetes eviction API against a PDB-protected test pod. Host uninstall, physical Cilium cleanup and live Longhorn data movement are not simulated as production-tested; validate the maintenance runbook on disposable data before migrating an important node.
+
 ## Access checks
 
 ```sh

@@ -35,7 +35,12 @@ else
 fi
 # Refuse to overwrite live configuration or turn an agent into a server in place.
 if [[ -e /etc/rancher/k3s/config.yaml || -d /var/lib/rancher/k3s/server/db || -e /etc/systemd/system/k3s-agent.service ]]; then
-  echo 'Existing k3s installation found. Follow the documented upgrade or role-change procedure.' >&2; exit 1
+  echo 'Existing k3s installation found. Use docs/node-role-changes.md for role changes; do not overwrite a live installation.' >&2; exit 1
+fi
+# A removed Cilium node must reboot to clear any residual kernel/BPF state before rejoining.
+reboot_marker=/var/lib/elektro-k3s/rejoin-requires-reboot
+if [[ -f $reboot_marker && $(cat "$reboot_marker") == "$(cat /proc/sys/kernel/random/boot_id)" ]]; then
+  echo 'Reboot this removed node before rejoining so Cilium starts with clean kernel state.' >&2; exit 1
 fi
 [[ -z $(swapon --noheadings --show) ]] || { echo 'Disable swap first.' >&2; exit 1; }
 install -d -m 0700 /etc/rancher/k3s

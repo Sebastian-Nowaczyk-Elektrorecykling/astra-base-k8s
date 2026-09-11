@@ -27,6 +27,8 @@ jobs:
         run: bash tests/workstation.sh
       - name: Verify bootstrap and GitOps address handoff
         run: bash tests/cluster-config.sh
+      - name: Verify the removed-node reboot guard
+        run: bash tests/node-rejoin-guard.sh
   manifests:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -54,14 +56,16 @@ jobs:
           sudo install -m 0755 kind /usr/local/bin/kind
       - name: Check scripts and render pinned charts
         run: |
-          for file in scripts/*.sh tests/*.sh; do bash -n "$file"; done
-          shellcheck -x -P SCRIPTDIR scripts/*.sh tests/*.sh
+          for file in scripts/*.sh scripts/lib/*.sh tests/*.sh; do bash -n "$file"; done
+          shellcheck -x -P SCRIPTDIR scripts/*.sh scripts/lib/*.sh tests/*.sh
+          python tests/node-maintenance.py
           python tests/render.py --charts
       - name: Validate admission against Kubernetes 1.36
         run: |
           kind create cluster --name elektro-validation --wait 120s --image kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
           kubectl create namespace app-demo
           bash tests/admission.sh
+          bash tests/node-drain.sh
       - name: Verify Authorino starts as a non-root user
         run: bash tests/authorino-startup.sh
       - name: Clean up disposable cluster

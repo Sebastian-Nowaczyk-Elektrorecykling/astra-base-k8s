@@ -26,11 +26,9 @@ The kube-vip DaemonSet has NET_ADMIN/NET_RAW on control-plane hosts and is there
 
 ## Reusing k8s2 and k8s3 as hybrids
 
-The three laptops can all be servers eventually, keeping the GPU usable on k8s2. Adding fresh controllers is simpler than converting an active worker. For an existing worker, preserve `/var/lib/longhorn`, its node identity and all needed data, drain safely, stop/disable its old `k3s-agent` service, back up the configuration, and reinstall using k3s's supported server installation with the same node name and the server join token. Do not run the fresh-node script over the old configuration and do not run an uninstallation that deletes workload data merely to bypass its checks.
+Use [the node role-change runbook](node-role-changes.md). `remove-node.sh` evacuates an existing worker, removes its Kubernetes/Longhorn node metadata and uninstalls k3s; after a reboot, `install-k3s.sh --role hybrid --server ...` joins it back as a server. Do not pass `--init`. Convert k8s2 and then k8s3, verifying each migration and keeping the two-server interval short. The GPU remains usable on a hybrid after its GPU label is restored.
 
-Read the upstream k3s installation/upgrade guidance for the installed version before conversion. A single-copy Longhorn volume on that node cannot survive loss of its disk. Evacuate it or take and verify an external backup first. Longhorn's volume/replica eviction and ordinary Kubernetes drain are different operations. Never drain two of three storage/controller nodes simultaneously.
-
-Changing a hybrid to dedicated also requires moving its workloads, evicting storage replicas, disabling Longhorn disk scheduling, updating labels and adding the dedicated taint. A taint alone leaves already-running workloads and stored replicas behind. Do not mark a server with live workloads “pure” without completing those steps.
+`set-server-role.sh` handles hybrid ↔ dedicated controller while preserving the running server and etcd member. Becoming dedicated includes workload drain, storage eviction, persistent/live role settings and the dedicated taint. It can be used on the sole server as long as another node has workload capacity. Server ↔ worker changes use removal/rejoin and require a surviving API/etcd server.
 
 ## Make services highly available separately
 

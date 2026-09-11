@@ -27,6 +27,7 @@ spec:
   values:
     runtimeClassName: nvidia
     nodeSelector:
+      elektro.local/workloads: 'true'
       elektro.local/gpu-vendor: nvidia
     gfd:
       enabled: false

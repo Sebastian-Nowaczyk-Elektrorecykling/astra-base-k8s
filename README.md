@@ -77,6 +77,7 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 - [Bootstrap](docs/bootstrap.md)
 - [Identity, dynamic projects, agents and OpenFGA](docs/identity-access.md)
 - [HA and node roles](docs/high-availability.md)
+- [Change roles, remove nodes and rejoin](docs/node-role-changes.md)
 - [Storage, backups, recovery and upgrades](docs/operations.md)
 - [GPU preparation](docs/gpu.md)
 - [Validation and security acceptance checks](docs/validation.md)
