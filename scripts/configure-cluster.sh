@@ -21,7 +21,7 @@ if [[ ${1:-} == --check ]]; then check=true; shift; fi
 # Administrator-controlled shell configuration, also consumed by install-k3s.sh.
 # shellcheck source=/dev/null
 source "$1"
-select_cluster
+select_cluster "${CLUSTER_NAME:-laptops}"
 INTERNAL_DOMAIN=${INTERNAL_DOMAIN:-internal}
 current=$(cluster_settings_json)
 jq -e --arg cluster "$cluster_name" '.data.CLUSTER_NAME == $cluster' <<<"$current" >/dev/null || {

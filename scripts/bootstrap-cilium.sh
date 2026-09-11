@@ -8,7 +8,7 @@ source "$repo/bootstrap/versions.env"
 source "$1"
 # shellcheck source=lib/cluster-settings.sh
 source "$repo/scripts/lib/cluster-settings.sh"
-select_cluster
+select_cluster "${CLUSTER_NAME:-laptops}"
 : "${API_HOST:?}"
 command -v helm >/dev/null
 command -v kubectl >/dev/null

@@ -2,7 +2,7 @@ hosts.${INTERNAL_DOMAIN}:1053 {
     errors
     rewrite stop {
         name regex ^(.+)[.]hosts[.]${INTERNAL_DOMAIN}[.]$ {1}.
-        answer auto
+        answer name ^(.+)[.]$ {1}.hosts.${INTERNAL_DOMAIN}.
         answer name ^[.]$ hosts.${INTERNAL_DOMAIN}.
     }
     # k3s updates this ConfigMap key from Node.status.addresses.

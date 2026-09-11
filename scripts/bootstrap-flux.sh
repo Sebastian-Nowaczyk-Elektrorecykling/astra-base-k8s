@@ -12,7 +12,7 @@ config=${2:-$repo/local/cluster.env}
 source "$config"
 # shellcheck source=lib/cluster-settings.sh
 source "$repo/scripts/lib/cluster-settings.sh"
-select_cluster
+select_cluster "${CLUSTER_NAME:-laptops}"
 cluster_path="clusters/$cluster_name"
 # Fail before bootstrap can replace a working CNI with a stale example address.
 bash "$repo/scripts/configure-cluster.sh" --check "$config"
