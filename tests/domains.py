@@ -21,6 +21,16 @@ def check(obj, reason=None):
     else:
         assert result.returncode != 0 and reason in result.stderr, result.stdout + result.stderr
 
+def wait_for_admission(objects, description):
+    # Independent admission-policy watchers can observe one update at different times.
+    # Probe every affected resource with server dry-run; never weaken the policies.
+    for attempt in range(30):
+        result = call(objects)
+        if result.returncode == 0:
+            return
+        time.sleep(1)
+    raise AssertionError(description + ': ' + result.stdout + result.stderr)
+
 assert subprocess.check_output(['kubectl', 'config', 'current-context'], text=True).strip() == 'kind-elektro-validation'
 settings = profile_settings()
 
@@ -83,16 +93,11 @@ assert values['PUBLIC_EDGE_IP'] != values['EDGE_IP']
 subprocess.run(['kubectl', 'apply', '--server-side', '--field-manager=elektro-validation', '-f', '-'],
                input=yaml.safe_dump_all(render('infrastructure/admission/guards.yaml', values)),
                text=True, check=True, stdout=subprocess.DEVNULL)
-for attempt in range(30):
-    if call([route('fuzzy.elektrorecykling.pl', public=True)]).returncode == 0:
-        break
-    time.sleep(1)
-else:
-    raise AssertionError('Updated public-exposure admission policy did not become effective')
 subprocess.run(['kubectl', 'create', 'namespace', 'app-foo'], check=True, stdout=subprocess.DEVNULL)
-for part in ['edge', 'certificate', 'access', 'routes']:
-    for obj in render(f'examples/public-exposure/{part}/resources.yaml', values):
-        check(obj)
+public_objects = [obj for part in ['edge', 'certificate', 'access', 'routes']
+                  for obj in render(f'examples/public-exposure/{part}/resources.yaml', values)]
+wait_for_admission([route('fuzzy.elektrorecykling.pl', public=True)] + public_objects,
+                   'Updated public-exposure admission policies did not become effective')
 for host in ['foo.internal', 'bar.internal', 'longhorn.admin.internal', 'k8s1.hosts.internal', 'internal']:
     check(route(host, public=True), 'Public routes require the explicit exposure label')
 check(route('*.elektrorecykling.pl', public=True), 'Routes require exact hostnames')
@@ -124,20 +129,15 @@ alternate = dict(settings, INTERNAL_DOMAIN='factory.internal', IDENTITY_HOST='ke
 subprocess.run(['kubectl', 'apply', '--server-side', '--field-manager=elektro-validation', '-f', '-'],
                input=yaml.safe_dump_all(render('infrastructure/admission/guards.yaml', alternate)),
                text=True, check=True, stdout=subprocess.DEVNULL)
-for attempt in range(30):
-    if call([route('foo.factory.internal')]).returncode == 0:
-        break
-    time.sleep(1)
-else:
-    raise AssertionError('Second cluster domain was not accepted')
+alternate_objects = [obj for part in ['edge', 'certificates', 'access', 'routes']
+                     for obj in render(f'infrastructure/{part}/resources.yaml', alternate)]
+wait_for_admission([route('foo.factory.internal')] + alternate_objects,
+                   'Second cluster domain was not accepted by every affected policy')
 for host, listener in [('foo.factory.internal', 'apps'), ('foo-42.test.factory.internal', 'test'),
                        ('foo.staging.factory.internal', 'staging'), ('longhorn.admin.factory.internal', 'admin')]:
     check(route(host, listener))
 for host in ['foo.internal', 'k8s9.hosts.factory.internal', 'hosts.factory.internal', 'deep.foo.factory.internal']:
     check(route(host), 'Internal hostnames must match')
-for part in ['edge', 'certificates', 'access', 'routes']:
-    for obj in render(f'infrastructure/{part}/resources.yaml', alternate):
-        check(obj)
 # Restore base admission before subsequent startup smoke checks.
 subprocess.run(['kubectl', 'apply', '--server-side', '--field-manager=elektro-validation', '-f',
                 'rendered/infrastructure-admission.yaml'], check=True, stdout=subprocess.DEVNULL)
