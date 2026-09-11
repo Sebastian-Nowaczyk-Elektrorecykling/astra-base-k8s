@@ -27,7 +27,9 @@ if [[ $node_ip != auto ]]; then
   [[ $node_ip =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || { echo 'Use --ip auto or a valid IPv4 address.' >&2; exit 2; }
   IFS=. read -r -a octets <<<"$node_ip"
   for octet in "${octets[@]}"; do
-    [[ $octet =~ ^(0|[1-9][0-9]{0,2})$ ]] && ((10#$octet <= 255)) || { echo 'Invalid --ip octet.' >&2; exit 2; }
+    if [[ ! $octet =~ ^(0|[1-9][0-9]{0,2})$ ]] || ((10#$octet > 255)); then
+      echo 'Invalid --ip octet.' >&2; exit 2
+    fi
   done
   ((10#${octets[0]} > 0 && 10#${octets[0]} != 127 && 10#${octets[0]} < 224)) || {
     echo '--ip must be a reachable unicast node address.' >&2; exit 2;
