@@ -13,11 +13,12 @@ Reserve, for example:
 | Optional future API VIP | `192.168.50.10` (outside service pool) |
 | Cilium service pool | `192.168.50.240`–`.249`, outside DHCP |
 | Gateway IP | `192.168.50.240` |
+| LAN DNS IP | `192.168.50.242` (separate reservation in the service pool) |
 | Application DNS | `*.internal`, `*.admin.internal`, `*.test.internal`, `*.staging.internal` → private gateway IP |
 | Machine DNS | `k8s1.hosts.internal`, `k8s2.hosts.internal`, `k8s3.hosts.internal` → each machine's LAN IP |
 | Pod / Service CIDRs | `10.42.0.0/16` / `10.43.0.0/16` |
 
-Change the LAN addresses in `clusters/laptops/settings.yaml`. Keep `IDENTITY_HOST: keycloak.admin.internal` and `PUBLIC_EDGE_IP: NOT_CONFIGURED` for the private setup. Follow [the DNS scheme](domains.md), including reserving `hosts.internal` on your resolver. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Set up DNS on a resolver your laptops **and client machines** use. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. For routed networks use Cilium BGP instead, as a reviewed replacement of the L2 policy.
+Change the LAN addresses in `clusters/laptops/settings.yaml`. Keep `IDENTITY_HOST: keycloak.admin.internal` and `PUBLIC_EDGE_IP: NOT_CONFIGURED` for the private setup. Configure the [LAN DNS service](dns.md), including `DNS_IP`, `DNS_CLIENT_CIDR`, `DNS_UPSTREAMS` and the three machine IPs in the tracked settings. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Keep working external DNS during bootstrap; after Flux starts CoreDNS, point client machines at `DNS_IP`. Keep cluster hosts' bootstrap DNS independent as explained in the DNS runbook. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. For routed networks use Cilium BGP instead, as a reviewed replacement of the L2 policy.
 
 Copy `bootstrap/cluster.env.example` to `local/cluster.env` on each host and the administrator workstation. Set the reachable API address there. `bootstrap-cilium.sh` copies `API_HOST` and `POD_CIDR` into `clusters/laptops/settings.yaml` before installing Cilium. All servers must receive identical critical k3s options. CIDRs must not overlap LAN/VPN networks. Do not change them on a running cluster.
 
@@ -30,7 +31,7 @@ hash -r
 
 On a fresh Debian machine without Git, first run `sudo apt-get update` and `sudo apt-get install -y git ca-certificates`, then clone this repository. If Debian has no sudo configured, perform the package installation and workstation script as root with `su -`; run the remaining bootstrap commands as your regular user.
 
-The installer supports Debian 12/13 on amd64 and arm64. It installs Git, the SSH client, curl, jq, OpenSSL and age from Debian, then checksum-verifies and installs kubectl, Helm, Flux and SOPS from their official release archives into `/usr/local/bin`. Their versions are pinned in `bootstrap/versions.env`; kubectl matches k3s's Kubernetes version. Re-running the script installs those same pins, including replacing an existing copy in `/usr/local/bin`. Keep that directory in PATH before older copies of these commands.
+The installer supports Debian 12/13 on amd64 and arm64. It installs Git, the SSH client, curl, jq, OpenSSL, age and `dig` from Debian, then checksum-verifies and installs kubectl, Helm, Flux and SOPS from their official release archives into `/usr/local/bin`. Their versions are pinned in `bootstrap/versions.env`; kubectl matches k3s's Kubernetes version. Re-running the script installs those same pins, including replacing an existing copy in `/usr/local/bin`. Keep that directory in PATH before older copies of these commands.
 
 The script prepares administration tools only. Cluster-node preparation remains `scripts/prepare-debian.sh`; workstation installation does not configure kubeconfig, generate credentials, change swap, install a container runtime or join a cluster.
 
@@ -153,6 +154,7 @@ Configure your existing host/router firewall; the preparation script does not re
 | TCP 4240, ICMP | Cluster nodes ↔ cluster nodes, Cilium health |
 | TCP 4244 | Hubble relay / trusted nodes → Cilium agents |
 | TCP 443 | LAN/VPN clients → private `EDGE_IP`; Internet clients → separate `PUBLIC_EDGE_IP` only after explicit opt-in |
+| TCP/UDP 53 | Trusted LAN → `DNS_IP`; DNS pods → configured upstream resolvers |
 | DNS/NTP/HTTPS egress | Nodes/pods → your resolvers, time service, registries and Git/chart sources |
 
 Longhorn also needs its documented internal manager/engine/replica traffic between cluster nodes; permit trusted cluster-node traffic on the private LAN, or derive a full host firewall allowlist from the pinned Longhorn release before restricting it. Do not present the above as an exhaustive Longhorn firewall policy. The external boundary must not expose these internal ports or the full NodePort range.

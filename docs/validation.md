@@ -18,6 +18,8 @@ The routing tests exercise all four internal groups, randomized test names, rese
 
 The node-maintenance CLI tests isolate API/SSH calls and cover last-server/workload protection, two- and three-server retirement ordering, Longhorn rebuild/health blockers, surviving API checks, failed drains, retained CSI attachments, read-only defaults and server-role configuration preservation. CI additionally exercises the real Kubernetes eviction API against a PDB-protected test pod. Host uninstall, physical Cilium cleanup and live Longhorn data movement are not simulated as production-tested; validate the maintenance runbook on disposable data before migrating an important node.
 
+The DNS runtime check starts the pinned CoreDNS image with the shipped configuration and a deterministic upstream fixture. It checks UDP/TCP answers, all application groups, exact machine records, negative/AAAA responses without upstream leakage, forwarding and live configuration reloads. Admission checks constrain the DNS LoadBalancer to its namespace/name, IP, ports, selector and LAN source range. LAN reachability and Cilium source filtering still require the [DNS acceptance queries](dns.md#answers-and-client-setup).
+
 ## Access checks
 
 ```sh

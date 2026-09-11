@@ -6,6 +6,7 @@ Reviewed 2026-09-09. These are exact starting versions, not a claim of permanent
 | --- | --- | --- |
 | k3s | `v1.36.4+k3s1` | [release](https://github.com/k3s-io/k3s/releases/tag/v1.36.4%2Bk3s1) |
 | Cilium | chart `1.20.1` | [release](https://github.com/cilium/cilium/releases/tag/v1.20.1) |
+| LAN DNS | CoreDNS `1.14.7` (reviewed 2026-09-11) | [release](https://github.com/coredns/coredns/releases/tag/v1.14.7) |
 | Flux | `v2.9.5` | [release](https://github.com/fluxcd/flux2/releases/tag/v2.9.5) |
 | Workstation kubectl | `v1.36.4` | [installation and checksum validation](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/) |
 | Workstation Helm | `v4.2.4` | [release](https://github.com/helm/helm/releases/tag/v4.2.4) |

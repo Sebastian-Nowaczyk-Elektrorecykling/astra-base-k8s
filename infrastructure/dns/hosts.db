@@ -1,0 +1,6 @@
+; Add exact A/AAAA records here for other LAN machines. Never add a wildcard.
+hosts.internal. 60 IN SOA dns.admin.internal. hostmaster.internal. (1 3600 600 86400 60)
+hosts.internal. 60 IN NS dns.admin.internal.
+k8s1.hosts.internal. 60 IN A ${K8S1_IP}
+k8s2.hosts.internal. 60 IN A ${K8S2_IP}
+k8s3.hosts.internal. 60 IN A ${K8S3_IP}

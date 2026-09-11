@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lan-dns
+spec:
+  replicas: 2
+  revisionHistoryLimit: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lan-dns
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lan-dns
+    spec:
+      automountServiceAccountToken: false
+      # No dependency on Kubernetes DNS; upstream IPs are explicit in the Corefile.
+      dnsPolicy: Default
+      nodeSelector:
+        kubernetes.io/os: linux
+        elektro.local/workloads: 'true'
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: lan-dns
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: coredns
+        image: coredns/coredns:1.14.7
+        args: ['-conf', '/etc/coredns/Corefile']
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        ports:
+        - name: dns-udp
+          containerPort: 1053
+          protocol: UDP
+        - name: dns-tcp
+          containerPort: 1053
+          protocol: TCP
+        - name: health
+          containerPort: 8080
+        - name: ready
+          containerPort: 8181
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: ready
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: health
+          initialDelaySeconds: 10
+        volumeMounts:
+        - name: config
+          mountPath: /etc/coredns
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: lan-dns
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lan-dns
+  annotations:
+    lbipam.cilium.io/ips: ${DNS_IP}
+    service.cilium.io/src-ranges-policy: allow
+spec:
+  type: LoadBalancer
+  allocateLoadBalancerNodePorts: false
+  externalTrafficPolicy: Cluster
+  loadBalancerSourceRanges:
+  - ${DNS_CLIENT_CIDR}
+  selector:
+    app.kubernetes.io/name: lan-dns
+  ports:
+  - name: dns-udp
+    port: 53
+    targetPort: 1053
+    protocol: UDP
+  - name: dns-tcp
+    port: 53
+    targetPort: 1053
+    protocol: TCP
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: lan-dns
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lan-dns

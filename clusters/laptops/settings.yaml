@@ -2,6 +2,16 @@ apiVersion: v1
 data:
   API_HOST: 192.168.2.153
   EDGE_IP: 192.168.50.240
+  # Reserve a separate unused IP in LB_START..LB_STOP, outside DHCP.
+  DNS_IP: 192.168.50.242
+  DNS_CLIENT_CIDR: 192.168.50.0/24
+  # Space-separated resolver IPs (optionally IP:port), in preference order.
+  # Never forward back to DNS_IP, kube-dns, or a router that forwards here.
+  DNS_UPSTREAMS: '1.1.1.1 9.9.9.9'
+  # Exact machine records, independent of API_HOST (which can become a VIP).
+  K8S1_IP: 192.168.2.153
+  K8S2_IP: 192.168.50.12
+  K8S3_IP: 192.168.50.13
   FGA_MODEL_ID: NOT_CONFIGURED
   FGA_STORE_ID: NOT_CONFIGURED
   LAN_INTERFACE_REGEX: ^en.*

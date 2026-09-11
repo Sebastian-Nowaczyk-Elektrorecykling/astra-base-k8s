@@ -52,6 +52,30 @@ broken_policy = copy.deepcopy(private_policy)
 broken_policy['spec']['targetRefs'].pop()
 check(broken_policy, 'Security policies must cover every')
 
+# A DNS exception must not permit an alternate application entry point.
+dns_service = next(d for d in yaml.safe_load_all((ROOT / 'rendered/infrastructure-dns.yaml').read_text())
+                   if d['kind'] == 'Service')
+check(dns_service)
+for change in ['namespace', 'name', 'address', 'port', 'selector', 'nodeports', 'sources', 'deny']:
+    bad = copy.deepcopy(dns_service)
+    if change == 'namespace':
+        bad['metadata']['namespace'] = 'app-demo'
+    elif change == 'name':
+        bad['metadata']['name'] = 'another-dns'
+    elif change == 'address':
+        bad['metadata']['annotations']['lbipam.cilium.io/ips'] = settings['EDGE_IP']
+    elif change == 'port':
+        bad['spec']['ports'][0]['port'] = 443
+    elif change == 'selector':
+        bad['spec']['selector'] = {'app': 'unprotected-ui'}
+    elif change == 'nodeports':
+        bad['spec']['allocateLoadBalancerNodePorts'] = True
+    elif change == 'sources':
+        bad['spec']['loadBalancerSourceRanges'] = ['0.0.0.0/0']
+    elif change == 'deny':
+        bad['metadata']['annotations']['service.cilium.io/src-ranges-policy'] = 'deny'
+    check(bad, 'Only managed gateways or the restricted LAN DNS service')
+
 # Switch only the disposable cluster's admission settings to test explicit public opt-in.
 values = dict(settings, PUBLIC_EDGE_IP='192.168.50.241', IDENTITY_HOST='login.elektrorecykling.pl')
 assert values['PUBLIC_EDGE_IP'] != values['EDGE_IP']
@@ -77,6 +101,8 @@ check(no_label, 'Public routes require the explicit exposure label')
 check(route(values['IDENTITY_HOST'], public=True), 'Public routes require the explicit exposure label')
 infra = route('fuzzy.elektrorecykling.pl', public=True)
 infra['spec']['rules'][0]['backendRefs'][0].update(namespace='identity', name='keycloak')
+check(infra, 'Public application routes must directly reference')
+infra['spec']['rules'][0]['backendRefs'][0].update(namespace='dns-system', name='lan-dns', port=53)
 check(infra, 'Public application routes must directly reference')
 identity = render('examples/public-exposure/routes/resources.yaml', values)[0]
 for path in ['/admin', '/realms/master', '/', '/metrics', '/realms/elektro-other']:

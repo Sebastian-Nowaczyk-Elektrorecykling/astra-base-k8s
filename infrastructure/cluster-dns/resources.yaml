@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  # Supported k3s import; do not replace k3s's managed coredns ConfigMap.
+  internal.server: |
+    internal:53 {
+        errors
+        cache 30
+        forward . ${DNS_IP}
+    }

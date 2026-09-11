@@ -1,0 +1,39 @@
+hosts.internal:1053 {
+    errors
+    file /etc/coredns/hosts.db hosts.internal {
+        reload 15s
+        reload_by_mtime
+    }
+    cache 30
+}
+
+internal:1053 {
+    errors
+    file /etc/coredns/internal.db internal {
+        reload 15s
+        reload_by_mtime
+    }
+    cache 30
+}
+
+# Kubernetes service discovery remains on kube-dns, never on the LAN resolver.
+cluster.local:1053 {
+    template ANY ANY {
+        rcode NXDOMAIN
+    }
+}
+
+.:1053 {
+    errors
+    health :8080 {
+        lameduck 5s
+    }
+    ready :8181
+    cache 30
+    loop
+    reload 15s
+    forward . ${DNS_UPSTREAMS} {
+        policy sequential
+        max_concurrent 1000
+    }
+}

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Repository/Helm validation harness. Never deployed to the cluster."""
 import argparse
+import ipaddress
 import json
 import pathlib
 import subprocess
@@ -80,6 +81,27 @@ def static():
     assert "cookieDomain" not in sp["oidc"]
     settings = read(ROOT / "clusters/laptops/settings.yaml")[0]["data"]
     assert "BASE_DOMAIN" not in settings
+    dns_ip = ipaddress.IPv4Address(settings['DNS_IP'])
+    assert ipaddress.IPv4Address(settings['LB_START']) <= dns_ip <= ipaddress.IPv4Address(settings['LB_STOP'])
+    assert str(dns_ip) not in [settings['EDGE_IP'], settings['PUBLIC_EDGE_IP'], settings['API_HOST']]
+    clients = ipaddress.IPv4Network(settings['DNS_CLIENT_CIDR'])
+    assert clients.prefixlen > 0 and not clients.is_multicast, 'DNS must not be an unrestricted resolver'
+    assert settings['DNS_UPSTREAMS'].split(), 'Configure at least one upstream'
+    for upstream in settings['DNS_UPSTREAMS'].split():
+        parts = upstream.split(':')
+        address = ipaddress.IPv4Address(parts[0])
+        assert not (address.is_loopback or address.is_unspecified or address.is_multicast)
+        assert address != dns_ip, 'DNS cannot forward to itself'
+        assert len(parts) == 1 or (len(parts) == 2 and 0 < int(parts[1]) < 65536)
+    for number in (1, 2, 3):
+        assert ipaddress.IPv4Address(settings[f'K8S{number}_IP']) != dns_ip
+    assert '*' not in (ROOT / 'infrastructure/dns/hosts.db').read_text()
+    assert by_name['dns']['spec']['dependsOn'] == [{'name': 'network'}]
+    assert by_name['cluster-dns']['spec']['dependsOn'] == [{'name': 'dns'}]
+    dns_pod = read(ROOT / 'infrastructure/dns/resources.yaml')[0]['spec']['template']['spec']
+    assert dns_pod['automountServiceAccountToken'] is False
+    assert dns_pod['dnsPolicy'] == 'Default'
+    assert dns_pod['containers'][0]['image'] == 'coredns/coredns:1.14.7'
     private_gateway = read(ROOT / "infrastructure/edge/resources.yaml")[-1]
     listener_hosts = {l["name"]: l["hostname"] for l in private_gateway["spec"]["listeners"]}
     assert listener_hosts == {"identity": "keycloak.admin.internal", "admin": "*.admin.internal",

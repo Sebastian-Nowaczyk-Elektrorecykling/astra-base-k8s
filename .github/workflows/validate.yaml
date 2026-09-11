@@ -44,7 +44,7 @@ jobs:
           version: v4.2.4
       - name: Install validation dependencies
         run: |
-          python -m pip install PyYAML==6.0.2
+          python -m pip install PyYAML==6.0.2 dnspython==2.8.0
           curl --fail --location --retry 3 https://dl.k8s.io/release/v1.36.4/bin/linux/amd64/kubectl -o /tmp/kubectl
           curl --fail --location --retry 3 https://dl.k8s.io/release/v1.36.4/bin/linux/amd64/kubectl.sha256 -o /tmp/kubectl.sha256
           cd /tmp
@@ -60,6 +60,8 @@ jobs:
           shellcheck -x -P SCRIPTDIR scripts/*.sh scripts/lib/*.sh tests/*.sh
           python tests/node-maintenance.py
           python tests/render.py --charts
+      - name: Verify DNS answers, forwarding and live reloads
+        run: python tests/dns.py
       - name: Validate admission against Kubernetes 1.36
         run: |
           kind create cluster --name elektro-validation --wait 120s --image kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed

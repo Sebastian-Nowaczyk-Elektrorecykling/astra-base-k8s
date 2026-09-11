@@ -6,6 +6,7 @@ A small, GitOps-managed cluster for Debian machines. Start with `k8s1` as a cont
 | --- | --- | --- |
 | Kubernetes | k3s, embedded etcd | One server initially; add two servers for quorum HA |
 | Network | Cilium | CNI, kube-proxy replacement, policies, WireGuard, LAN load-balancer IP allocation and L2 announcements, Hubble relay |
+| LAN DNS | CoreDNS | Internal zones and configurable upstream forwarding on a stable Cilium IP |
 | GitOps | Flux | Helm's normal lifecycle, explicit dependency stages, SOPS-encrypted secrets |
 | Volumes | Longhorn V1 engine | Ordinary `/var/lib/longhorn` directory; no raw partition |
 | Databases | CloudNativePG | PostgreSQL for Keycloak and OpenFGA; reusable cluster example |
@@ -50,7 +51,7 @@ Continue with the runbook; this command alone does not install the platform. Sup
 | Administration | `keycloak.admin.internal`, `longhorn.admin.internal` | Private gateway `EDGE_IP` |
 | Applications / production | `foo.internal`, `bar.internal` | Private gateway `EDGE_IP` |
 
-Configure these zones on your existing LAN resolver. Wildcard DNS and certificates support new names; each deployed application still needs an exact route, callback and permission grant. The separate application-platform Flux repository owns deployment naming and lifecycle. This base adds no developer-platform components or DNS server.
+Point clients at the CoreDNS service's `DNS_IP`, directly or through DHCP. Configure `DNS_IP`, `DNS_CLIENT_CIDR`, `DNS_UPSTREAMS` and the machine addresses in `clusters/laptops/settings.yaml`; see [LAN DNS setup](docs/dns.md). Unknown machine names return NXDOMAIN. Wildcard DNS and certificates support new application names; each application still needs an exact route, callback and permission grant. The separate application-platform Flux repository owns deployment naming and lifecycle.
 
 Internet exposure is **off by default**. An optional separate public gateway has its own IP, certificate and exact routes. `fuzzy.elektrorecykling.pl` can target the same Service as `foo.internal`; `bar.internal` remains private. Forwarding the private gateway to the Internet would defeat this boundary. See [DNS and migration](docs/domains.md) and [explicit public exposure](examples/public-exposure/README.md).
 
@@ -68,7 +69,7 @@ The chart does not create its own StorageClass. Kyverno mutates **CNPG Cluster r
 
 `https://longhorn.admin.internal` requires Keycloak login **and** an OpenFGA `service:<hostname>#access` grant. No grants are installed automatically. Keycloak itself is the explicit native-authentication exception at `https://keycloak.admin.internal`; putting the login service behind its own login requirement would create a loop. Databases, the Kubernetes API and cluster management protocols use their native credentials and network boundaries.
 
-Routes are centrally managed in `edge`. New application routes inherit their selected internal listener's security policy. Kubernetes admission blocks NodePort/extra LoadBalancer services, external IPs, alternate ingress APIs and per-route security overrides. Cilium blocks direct ingress into application pods and restricts the Longhorn UI, identity and authorization services. Kubernetes administrators, node root access and permission to port-forward are trusted infrastructure administration paths.
+Routes are centrally managed in `edge`. New application routes inherit their selected internal listener's security policy. Kubernetes admission permits the restricted LAN DNS service and managed gateways, and blocks NodePort/other LoadBalancer services, external IPs, alternate ingress APIs and per-route security overrides. Cilium blocks direct ingress into application pods and restricts the Longhorn UI, identity and authorization services. Kubernetes administrators, node root access and permission to port-forward are trusted infrastructure administration paths.
 
 The default is for a trusted private LAN; cluster-internal identity requests use restricted Service endpoints. Cilium encrypts pod traffic between nodes. Do not expose node management ports to the Internet. Application egress remains allowed: this is not a complete hostile multitenancy sandbox.
 

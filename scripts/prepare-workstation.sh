@@ -3,7 +3,7 @@
 set -euo pipefail
 usage() {
   echo 'Usage: sudo bash scripts/prepare-workstation.sh'
-  echo 'Installs Git, SSH client, curl, jq, OpenSSL, age, kubectl, Helm, Flux and SOPS.'
+  echo 'Installs Git, SSH client, curl, jq, OpenSSL, age, dig, kubectl, Helm, Flux and SOPS.'
   echo 'Supports Debian 12/13 on amd64 and arm64; binary pins are in bootstrap/versions.env.'
 }
 case ${1:-} in
@@ -32,7 +32,7 @@ source "$repo/bootstrap/versions.env"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends ca-certificates curl git openssh-client \
-  jq openssl age tar gzip coreutils
+  jq openssl age dnsutils tar gzip coreutils
 
 umask 077
 tmp=$(mktemp -d /tmp/elektro-workstation.XXXXXX)

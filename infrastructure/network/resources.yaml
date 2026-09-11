@@ -8,11 +8,11 @@ spec:
     stop: ${LB_STOP}
   serviceSelector:
     matchExpressions:
-    - key: gateway.envoyproxy.io/owning-gateway-name
+    - key: io.kubernetes.service.namespace
       operator: In
       values:
-      - platform
-      - public
+      - envoy-gateway-system
+      - dns-system
 ---
 apiVersion: cilium.io/v2alpha1
 kind: CiliumL2AnnouncementPolicy
@@ -21,11 +21,11 @@ metadata:
 spec:
   serviceSelector:
     matchExpressions:
-    - key: gateway.envoyproxy.io/owning-gateway-name
+    - key: io.kubernetes.service.namespace
       operator: In
       values:
-      - platform
-      - public
+      - envoy-gateway-system
+      - dns-system
   interfaces:
   - ${LAN_INTERFACE_REGEX}
   externalIPs: false
@@ -54,6 +54,7 @@ spec:
       - identity
       - authorization
       - edge
+      - dns-system
   ingress:
   - fromEndpoints:
     - matchLabels:
