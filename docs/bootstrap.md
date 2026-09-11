@@ -15,7 +15,7 @@ Reserve, for example:
 | Optional future API VIP | `192.168.2.10` (outside service pool) |
 | Cilium service pool | `192.168.2.240`–`.249`, outside DHCP |
 | Gateway IP | `192.168.2.240` |
-| LAN DNS IP | `192.168.2.242` (separate reservation in the service pool) |
+| LAN DNS IP | `192.168.2.242` (distinct IP within the excluded service pool) |
 | Application DNS | `*.internal`, `*.admin.internal`, `*.test.internal`, `*.staging.internal` → private gateway IP |
 | Machine DNS | `NODE.hosts.internal` → each registered node's reported LAN IP, discovered automatically |
 | Pod / Service CIDRs | `10.42.0.0/16` / `10.43.0.0/16` |

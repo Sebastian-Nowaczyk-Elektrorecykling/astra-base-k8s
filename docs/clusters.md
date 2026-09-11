@@ -29,7 +29,7 @@ Use **LAN addresses** for the API, DNS and gateway. `Node.status.addresses` call
 | `LB_START`, `LB_STOP` | The start/end of a small LAN range Cilium can allocate. Include the DNS and gateway IPs. Exclude this whole range from DHCP and other static allocations. |
 | `DNS_CLIENT_CIDR` | The client LAN subnet allowed to query DNS, for example `192.168.2.0/24` **if that is your actual subnet**. |
 | `DNS_UPSTREAMS` | Space-separated upstream DNS server IPs, optionally `IP:port`; for example your router, or `1.1.1.1 9.9.9.9`. No forwarding loop back to this resolver. |
-| `LAN_INTERFACE_REGEX` | Names of the wired node interfaces on which Cilium announces virtual IPs. Inspect `ip -br link`; `^(en.*|eth.*)$` covers common Ethernet names. |
+| `LAN_INTERFACE_REGEX` | Names of the wired node interfaces on which Cilium announces virtual IPs. Inspect `ip -br link`; `^(en.*\|eth.*)$` covers common Ethernet names. |
 | `POD_CIDR` | Cluster-private Pod address range; default for the existing cluster is `10.42.0.0/16`. Keep the value with which k3s was installed. |
 | `SERVICE_CIDR` | Cluster-private Service address range; existing default is `10.43.0.0/16`. Keep the installed value. |
 | `CLUSTER_DNS` | kube-dns's **Service IP**, existing default `10.43.0.10`. This is for pods/k3s, not the DNS address for LAN clients. It must belong to `SERVICE_CIDR`. |

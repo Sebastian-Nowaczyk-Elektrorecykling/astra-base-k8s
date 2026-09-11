@@ -34,7 +34,7 @@ kubectl -n authorization get secret openfga-key -o jsonpath='{.data.keys}' \
 bash scripts/bootstrap-openfga.sh local/openfga.key
 ```
 
-Copy the printed store/model IDs into that cluster's `clusters/NAME/settings.yaml`, commit and push. IDs are not secrets. The script creates an immutable authorization model using the official API and records partial progress in `local/NAME/openfga-state.json`. The optional second argument selects `NAME` (default `laptops`); a pre-existing `local/openfga-state.json` is still respected for laptops. If it fails after creating the store, reuse that store; do not repeatedly create new ones. Reapply a corrected model to the existing store and record the newly returned model ID. Models are immutable; there is no silent migration to “latest”.
+Copy the printed store/model IDs into that cluster's `clusters/NAME/settings.yaml`, commit and push. IDs are not secrets. The script creates an immutable authorization model using the official API and records partial progress in `local/NAME/openfga-state.json`. The optional second argument selects `NAME` (default `laptops`). If it fails after creating the store, reuse that store; do not repeatedly create new ones. Reapply a corrected model to the existing store and record the newly returned model ID. Models are immutable; there is no silent migration to “latest”.
 
 Find your user UUID (`sub`) in Keycloak's `elektro` realm. Prepare this request with the actual UUID and hostname in `local/first-grant.json`:
 
