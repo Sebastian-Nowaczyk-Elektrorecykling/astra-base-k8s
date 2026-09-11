@@ -25,6 +25,8 @@ jobs:
         run: bash scripts/prepare-workstation.sh
       - name: Exercise CLI tools and Flux bootstrap manifests
         run: bash tests/workstation.sh
+      - name: Verify secret generation failure, retry and credential preservation
+        run: bash tests/secrets.sh
       - name: Verify bootstrap and GitOps address handoff
         run: bash tests/cluster-config.sh
       - name: Verify independent clusters share the same infrastructure
@@ -63,6 +65,7 @@ jobs:
           python tests/node-maintenance.py
           python tests/network-settings.py
           python tests/render.py --charts
+          python tests/contracts.py --render
           python tests/metrics.py
       - name: Verify DNS answers, forwarding and live reloads
         run: python tests/dns-runtime.py
@@ -72,6 +75,8 @@ jobs:
           kubectl create namespace app-demo
           bash tests/admission.sh
           bash tests/node-drain.sh
+      - name: Verify the downstream repository starter
+        run: python tests/contracts.py --runtime
       - name: Verify Authorino starts as a non-root user
         run: bash tests/authorino-startup.sh
       - name: Verify metrics startup, ingestion and Grafana authentication

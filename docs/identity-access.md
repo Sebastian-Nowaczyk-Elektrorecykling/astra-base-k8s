@@ -74,7 +74,7 @@ The future internal developer platform and its applications belong in a separate
 
 Use one `elektro` realm with clients, groups/organizations and OpenFGA objects for most projects. A Keycloak client or organization is not a Kubernetes Service. Creating one cannot automatically deploy an application or grant traffic. A new project needs:
 
-1. An application Service and workload, and an exact HTTPRoute on the correct `apps`, `admin`, `test` or `staging` listener. Copy `examples/protected-app/` into a reconciled directory.
+1. An application Service and workload, and an exact HTTPRoute on the correct `apps`, `admin`, `test` or `staging` listener. Use the [downstream repository starter](../examples/downstream-repository/README.md); it separates workload readiness from protected routes and substitutes the profile's suffix.
 2. An **exact** `https://HOST/oauth2/callback` registered on the `elektro-edge` Keycloak client. Preserve existing callbacks when updating the list using the Admin API. The gateway uses the requesting hostname and host-only cookies; it does not share a bearer cookie over all sibling domains. Do not register `*` or claim Keycloak supports arbitrary hostname wildcards.
 3. Explicit OpenFGA grants on `service:HOST`. Wildcard DNS/certificates do not create routes or wildcard permission grants. An unprovisioned tenant hostname has no access.
 

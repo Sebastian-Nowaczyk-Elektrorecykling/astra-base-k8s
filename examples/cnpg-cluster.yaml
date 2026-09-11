@@ -3,8 +3,11 @@ kind: Cluster
 metadata:
   name: app-db
   namespace: app-demo
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
 spec:
   instances: 1
+  enableSuperuserAccess: false
   imageName: ghcr.io/cloudnative-pg/postgresql:17.11-standard-trixie
   storage:
     size: 10Gi
@@ -15,3 +18,5 @@ spec:
   affinity:
     nodeSelector:
       elektro.local/workloads: 'true'
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required

@@ -4,6 +4,7 @@ metadata:
   name: cluster-settings
   namespace: flux-system
 data:
+  BASE_CONTRACT_VERSION: '1'
   PG_IMAGE: ghcr.io/cloudnative-pg/postgresql:17.11-standard-trixie
   FGA_MODEL_ID: NOT_CONFIGURED
   FGA_STORE_ID: NOT_CONFIGURED

@@ -20,6 +20,9 @@ def check_rendered():
     objects = read(ROOT / 'rendered/charts/metrics.yaml')
     settings = profile_settings()
     by_key = {(o['kind'], o['metadata']['name']): o for o in objects}
+    # The role-change tool deliberately retains only this infrastructure DaemonSet.
+    exporter = by_key['DaemonSet', 'metrics-prometheus-node-exporter']
+    assert exporter['spec']['template']['metadata']['labels']['elektro.local/metrics-component'] == 'node-exporter'
     prometheus = by_key['Prometheus', 'metrics-prometheus']['spec']
     for kind in ['serviceMonitor', 'podMonitor', 'rule', 'probe', 'scrapeConfig']:
         assert prometheus[kind + 'NamespaceSelector'] == {

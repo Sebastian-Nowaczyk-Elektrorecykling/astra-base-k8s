@@ -15,6 +15,7 @@ A reusable GitOps base for Debian clusters. The `laptops` profile starts with `k
 | Permissions | OpenFGA + Authorino | Authorino verifies JWTs and calls OpenFGA's Check API using its supported HTTP metadata configuration |
 | Admission | Kubernetes CEL policies + Kyverno | Block alternate exposure paths; default CNPG storage before PVC creation |
 | Certificates | cert-manager | Private CA by default; public DNS-01 issuer example |
+| Metrics | Prometheus, Alertmanager, Grafana | Cluster-administrator dashboards at `grafana.admin.internal`; persistent bounded retention |
 | GPU | Optional upstream device plugin | NVIDIA preparation provided; no vendor driver is installed on ordinary nodes |
 
 Envoy Gateway supplies a supported OIDC/external-auth policy API. Cilium remains the cluster network and load-balancer implementation. Using handwritten Cilium Envoy filter patches for the authentication boundary would make this foundation harder to maintain.
@@ -76,6 +77,9 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 
 ## Operations and extension
 
+- [Contract for downstream repositories and their authors](docs/platform-contract.md)
+- [Standalone application Flux repository starter](examples/downstream-repository/README.md)
+- [Administration script reference](docs/scripts.md)
 - [Bootstrap](docs/bootstrap.md)
 - [Cluster settings, DHCP and multiple clusters](docs/clusters.md)
 - [LAN DNS](docs/dns.md)
@@ -90,4 +94,6 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 - [Validation and security acceptance checks](docs/validation.md)
 - [Upstream release pins and references](docs/upstream.md)
 
-The `examples/` directory is **not reconciled**. It contains a CNPG cluster, a protected application route, a GPU smoke job, optional kube-vip reconciliation, public certificates, explicit public exposure and backup examples. Enable only the pieces you need. Flux infrastructure namespaces and their RBAC are reserved for platform administrators; do not grant applications namespace-admin access there.
+The `examples/` directory is **not reconciled**. It contains the downstream repository starter and its base attachment, a CNPG cluster with required network allowances, a GPU smoke job, optional BGP/kube-vip/NVIDIA reconciliation, public certificates, explicit public exposure and backup examples. Enable only the pieces you need. Flux infrastructure namespaces and their RBAC are reserved for platform administrators; do not grant applications namespace-admin access there.
+
+For services on top of this base, use a separate Git source and reconciliation attached from `clusters/NAME`. Reuse the installed Flux controllers. The contract describes resource ownership, dependencies, per-profile substitutions, identity grants, network policies, SOPS, data retention and acceptance checks; the starter includes `AGENTS.md` for future human and AI authors.

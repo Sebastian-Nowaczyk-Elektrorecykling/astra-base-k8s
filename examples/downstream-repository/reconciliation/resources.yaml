@@ -1,0 +1,59 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: applications-workloads
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./clusters/${CLUSTER_NAME}/workloads
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: applications
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  dependsOn:
+  - name: storage
+  - name: network
+  - name: cluster-dns
+  postBuild:
+    substituteFrom:
+    - kind: ConfigMap
+      name: cluster-settings
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: applications-routes
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./clusters/${CLUSTER_NAME}/routes
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: applications
+  dependsOn:
+  - name: applications-workloads
+  - name: access
+  healthCheckExprs:
+  - apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    current: >-
+      has(status) && has(status.parents) && status.parents.exists(p,
+      p.controllerName == 'gateway.envoyproxy.io/gatewayclass-controller' &&
+      has(p.conditions) && ['Accepted', 'ResolvedRefs'].all(t,
+      p.conditions.exists(c, c.type == t && c.status == 'True' &&
+      c.observedGeneration == metadata.generation)))
+  postBuild:
+    substituteFrom:
+    - kind: ConfigMap
+      name: cluster-settings

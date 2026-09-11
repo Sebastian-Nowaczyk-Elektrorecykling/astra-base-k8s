@@ -39,8 +39,9 @@ def validate(data):
     assert start <= stop, 'LB_START must not exceed LB_STOP'
     assert lan.network_address < start <= stop < lan.broadcast_address, 'The entire L2 service pool must be inside LAN_CIDR, excluding network/broadcast addresses'
     try:
-        api = ipaddress.IPv4Address(data['API_HOST'])
+        api = address('API_HOST')
     except ipaddress.AddressValueError:
+        assert not re.fullmatch(r'[0-9.]+', data['API_HOST']), 'API_HOST resembles an invalid IPv4 address'
         api = None  # A stable API DNS name is also supported; no DNS lookup during local validation.
     if api is not None:
         assert not start <= api <= stop, 'The API address must be outside the entire Cilium service pool'
@@ -53,6 +54,11 @@ def validate(data):
         assert start <= ip <= stop, 'DNS/gateway LAN addresses must be inside LB_START..LB_STOP'
         assert ip not in pod and ip not in service, 'LAN virtual IPs cannot use Pod/Service addresses'
         assert str(ip) != data['API_HOST'], 'API_HOST must not share a DNS/gateway service IP'
+    if 'API_VIP' in data:
+        api_vip = address('API_VIP')
+        assert lan.network_address < api_vip < lan.broadcast_address, 'The optional ARP API VIP must be inside LAN_CIDR'
+        assert not start <= api_vip <= stop, 'API_VIP must be outside the entire service pool'
+        assert data.get('API_VIP_INTERFACE'), 'Configure API_VIP_INTERFACE with the optional API VIP'
     upstreams = data['DNS_UPSTREAMS'].split()
     assert 1 <= len(upstreams) <= 15, 'Configure between one and fifteen DNS upstreams'
     for upstream in upstreams:

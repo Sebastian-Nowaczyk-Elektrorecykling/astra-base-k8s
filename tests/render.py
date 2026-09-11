@@ -168,6 +168,9 @@ def render():
         ds = list(yaml.safe_load_all(text))
         write(ROOT / "rendered" / (p.parent.relative_to(ROOT).as_posix().replace("/", "-") + ".yaml"), ds)
         manifests.extend(d for d in ds if d)
+    # Backup configuration is opt-in, but its pinned upstream chart still needs
+    # linting and supplies the ObjectStore CRD used by the example schema check.
+    manifests.extend(read(ROOT / 'examples/backups/barman-release.yaml'))
     sources = {d["metadata"]["name"]: d["spec"] for d in manifests if d.get("kind") == "HelmRepository"}
     chart_objects = []
     for hr in [d for d in manifests if d.get("kind") == "HelmRelease"]:

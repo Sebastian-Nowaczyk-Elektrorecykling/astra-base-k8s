@@ -45,6 +45,12 @@ rejected(LB_START='192.168.2.0')
 rejected(LB_STOP='192.168.2.255')
 rejected(LB_STOP='192.168.3.1')
 rejected(API_HOST='192.168.2.245')  # Even currently unused pool addresses conflict.
+rejected(API_HOST='999.168.2.153')
+rejected(API_HOST='127.0.0.1')
+rejected(API_HOST='0.0.0.0')
+rejected(API_VIP='192.168.2.245', API_VIP_INTERFACE='eth0')
+rejected(API_VIP='192.168.2.10')
+module.validate({**settings, 'API_VIP': '192.168.2.10', 'API_VIP_INTERFACE': 'eth0'})
 rejected(POD_CIDR='192.168.0.0/16')
 rejected(SERVICE_CIDR='192.168.2.0/24', CLUSTER_DNS='192.168.2.10')
 rejected(BGP_ENABLED='true')  # Router must be chosen explicitly.

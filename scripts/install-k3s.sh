@@ -22,7 +22,17 @@ while (($#)); do
     *) usage >&2; exit 2 ;;
   esac
 done
-[[ $role =~ ^(controller|hybrid|worker)$ && $node_name =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ && ( $node_ip == auto || $node_ip =~ ^[0-9.]+$ ) && -f $config ]] || { usage >&2; exit 2; }
+[[ $role =~ ^(controller|hybrid|worker)$ && $node_name =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ && ${#node_name} -le 63 && -f $config ]] || { usage >&2; exit 2; }
+if [[ $node_ip != auto ]]; then
+  [[ $node_ip =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || { echo 'Use --ip auto or a valid IPv4 address.' >&2; exit 2; }
+  IFS=. read -r -a octets <<<"$node_ip"
+  for octet in "${octets[@]}"; do
+    [[ $octet =~ ^(0|[1-9][0-9]{0,2})$ ]] && ((10#$octet <= 255)) || { echo 'Invalid --ip octet.' >&2; exit 2; }
+  done
+  ((10#${octets[0]} > 0 && 10#${octets[0]} != 127 && 10#${octets[0]} < 224)) || {
+    echo '--ip must be a reachable unicast node address.' >&2; exit 2;
+  }
+fi
 # This is an administrator-controlled shell config; never source untrusted input.
 # shellcheck source=/dev/null
 source "$config"

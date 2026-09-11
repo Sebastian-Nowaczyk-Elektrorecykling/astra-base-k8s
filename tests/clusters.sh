@@ -31,6 +31,15 @@ for cluster in workshop factory; do
   [[ $(sha256sum "$tmp/clusters/$cluster/settings.yaml") == "$digest" ]]
 done
 [[ $(sha256sum "$tmp/clusters/laptops/settings.yaml") == "$original" ]]
+for address in 999.1.2.3 192.168.2.999 192.168.02.5 127.0.0.1 0.0.0.0 224.1.2.3; do
+  if bash "$tmp/scripts/install-k3s.sh" --role hybrid --name server-a --ip "$address" \
+    --config "$tmp/factory.env" --init --print-config >"$tmp/invalid.log" 2>&1; then
+    echo "Accepted invalid node address: $address" >&2; exit 1
+  fi
+done
+long_name=$(printf '%064d' 0)
+if bash "$tmp/scripts/install-k3s.sh" --role hybrid --name "$long_name" --ip auto \
+  --config "$tmp/factory.env" --init --print-config >"$tmp/invalid.log" 2>&1; then exit 1; fi
 # A selected profile must not bootstrap into the other cluster's current context.
 mkdir "$tmp/bin"
 export ELEKTRO_REAL_KUBECTL

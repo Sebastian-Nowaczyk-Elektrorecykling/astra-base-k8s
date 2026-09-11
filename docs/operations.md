@@ -10,6 +10,8 @@ CNPG's default is applied to the Cluster CR by Kyverno, not to every PVC carryin
 
 Longhorn and PostgreSQL replication solve different failures. Use CNPG replicas for database availability. Three CNPG instances each with three Longhorn replicas produce nine storage copies and unnecessary write amplification for this setup. One instance on a one-copy class is the configured starting point, including the identity and permission databases.
 
+Application repositories create their own CNPG Clusters and credentials. Use [the cluster example](../examples/cnpg-cluster.yaml) together with [its network policy](../examples/cnpg-network.yaml), after creating the application namespace. Adapt both database/client selectors. The base isolates application ingress, including same-namespace traffic; a Cluster CR alone does not allow database clients, PostgreSQL replication or the operator's instance-manager calls. See [the downstream contract](platform-contract.md#storage-and-databases) for service/secret names, ownership, readiness and retention.
+
 ## Backups before important data
 
 The base installs scheduled **local** etcd snapshots every six hours, retaining twelve. It cannot invent an off-cluster destination or backup credentials. Configure a real destination before putting irreplaceable data on these disks:
@@ -39,7 +41,7 @@ kubectl get certificates -A
 kubectl top nodes
 ```
 
-Hubble relay is enabled for troubleshooting, with no unauthenticated web UI. Use the upstream Cilium/Hubble CLI through privileged port-forwarding. k3s supplies metrics-server. Prometheus/Grafana/Loki and inference-serving stacks are deliberately not part of the base; add them when there is a concrete need and protect their endpoints like other apps.
+Hubble relay is enabled for troubleshooting, with no unauthenticated web UI. Use the upstream Cilium/Hubble CLI through privileged port-forwarding. k3s supplies metrics-server. The base also installs Prometheus, Alertmanager and Grafana for cluster administrators; see [metrics operations and access](monitoring.md). Log/trace aggregation and inference-serving stacks belong to separately designed application repositories.
 
 ## Upgrades
 

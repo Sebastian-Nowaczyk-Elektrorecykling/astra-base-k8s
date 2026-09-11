@@ -67,4 +67,4 @@ EOF
   systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
 fi
 echo 'Host prepared. Reboot, then check swap stays disabled and time is synchronized.'
-echo 'Reserve a static DHCP lease; review the required LAN firewall ports in docs/bootstrap.md.'
+echo 'Keep controller/API addresses stable; workers may use DHCP. Review LAN firewall ports in docs/bootstrap.md.'

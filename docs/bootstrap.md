@@ -22,15 +22,6 @@ Reserve, for example:
 
 Change the LAN addresses in `clusters/laptops/settings.yaml`; [the settings reference](clusters.md#what-to-put-in-settingsyaml) explains every field. These examples must match your actual subnet. Keep `INTERNAL_DOMAIN: internal`, `IDENTITY_HOST: keycloak.admin.internal` and the shared `PUBLIC_EDGE_IP: NOT_CONFIGURED` default for the private setup. Configure the [LAN DNS service](dns.md), including `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS`; no node inventory is needed. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Keep working external DNS during bootstrap; after Flux starts CoreDNS, point client machines at `DNS_IP`. Keep cluster hosts' bootstrap DNS independent as explained in the DNS runbook. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. The [EdgeRouter guide](bgp.md) gives the minimum router setup and an optional BGP configuration. BGP is disabled by default.
 
-Install the workstation tools below before running this export. Edit the tracked settings, then export the shared bootstrap values:
-
-```sh
-mkdir -p local
-bash scripts/configure-cluster.sh --export laptops > local/cluster.env
-```
-
-Copy this env file to each node. All servers must receive identical critical k3s options. CIDRs must not overlap LAN/VPN networks. Do not change them on a running cluster. For a second cluster, [create its own profile](clusters.md#create-a-second-profile) and use its name in the export command; do not copy another cluster's secrets or generated Flux sync.
-
 Prepare the administrator workstation from a checkout of this repository:
 
 ```sh
@@ -43,6 +34,15 @@ On a fresh Debian machine without Git, first run `sudo apt-get update` and `sudo
 The installer supports Debian 12/13 on amd64 and arm64. It installs Git, the SSH client, curl, jq, Python 3 (for configuration validation), OpenSSL, age and `dig` from Debian, then checksum-verifies and installs kubectl, Helm, Flux and SOPS from their official release archives into `/usr/local/bin`. Their versions are pinned in `bootstrap/versions.env`; kubectl matches k3s's Kubernetes version. Re-running the script installs those same pins, including replacing an existing copy in `/usr/local/bin`. Keep that directory in PATH before older copies of these commands.
 
 The script prepares administration tools only. Cluster-node preparation remains `scripts/prepare-debian.sh`; workstation installation does not configure kubeconfig, generate credentials, change swap, install a container runtime or join a cluster.
+
+With the workstation tools installed and the tracked settings edited, export the shared bootstrap values:
+
+```sh
+mkdir -p local
+bash scripts/configure-cluster.sh --export laptops > local/cluster.env
+```
+
+Copy this env file to each node. All servers must receive identical critical k3s options. CIDRs must not overlap LAN/VPN networks. Do not change them on a running cluster. For a second cluster, [create its own profile](clusters.md#create-a-second-profile) and use its name in the export command; do not copy another cluster's secrets or generated Flux sync.
 
 ## 2. Prepare and start nodes
 

@@ -7,4 +7,3 @@ __pycache__/
 *.key
 kubeconfig*
 *.dec.yaml
-!examples/secrets.example.yaml

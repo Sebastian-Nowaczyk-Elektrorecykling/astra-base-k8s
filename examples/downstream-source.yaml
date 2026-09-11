@@ -1,0 +1,40 @@
+# BASE repository attachment, copied into clusters/NAME and included in its root.
+# Trusted platform repository only: the parent can create Flux reconciliation objects.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: applications
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: ssh://git@github.com/REPLACE_OWNER/REPLACE_REPOSITORY
+  ref:
+    branch: main
+  secretRef:
+    name: applications-git
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: applications
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 5m
+  # Set this literal path per attached cluster; the base root does not substitute it.
+  path: ./clusters/example
+  prune: true
+  # The child stages wait. Waiting here would create an unnecessary parent gate.
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: applications
+  dependsOn:
+  - name: access
+  - name: cluster-dns
+  - name: secrets
+  postBuild:
+    substituteFrom:
+    - kind: ConfigMap
+      name: cluster-settings

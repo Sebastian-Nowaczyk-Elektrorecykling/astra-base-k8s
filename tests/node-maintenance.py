@@ -61,7 +61,7 @@ elif a[:2]==['get','nodes.longhorn.io']:
     else: out(s.get('lh_node',{'status':{'diskStatus':{}}}))
 elif a[:2]==['get','volumeattachments.storage.k8s.io']: listof(s.get('attachments',[]))
 elif a[:2]==['get','secret']: pass
-elif a[:2]==['get','pods']: listof([])
+elif a[:2]==['get','pods']: listof(s.get('pods',[]))
 elif a[0]=='cordon':
     if s.get('cordon_blocked'): err('simulated cordon failure')
     s['nodes'][0]['spec']['unschedulable']=True; save()
@@ -184,6 +184,14 @@ run_case('last Longhorn copy prevents shutdown',s,expect=1,reason='Longhorn repl
 s=fixture();s['attachments']=[{'spec':{'nodeName':'k8s2'}}]
 run_case('remaining CSI attachment prevents shutdown',s,expect=1,reason='CSI volumes')
 run_case('sole server can become dedicated',fixture('hybrid',1),script='set-server-role.sh',extra=['--role','controller'])
+exporter={'metadata':{'namespace':'monitoring','labels':{'elektro.local/metrics-component':'node-exporter'},
+                     'ownerReferences':[{'kind':'DaemonSet','name':'metrics-prometheus-node-exporter'}]},
+          'status':{'phase':'Running'}}
+s=fixture('hybrid',1); s['pods']=[exporter]
+run_case('controller conversion retains the monitoring node exporter',s,script='set-server-role.sh',extra=['--role','controller'])
+s=fixture('hybrid',1); s['pods']=[json.loads(json.dumps(exporter))]
+s['pods'][0]['metadata']['ownerReferences'][0]['name']='unexpected-workload'
+run_case('controller conversion still blocks other DaemonSets',s,script='set-server-role.sh',extra=['--role','controller'],expect=1,reason='workload pods')
 run_case('dedicated server can become hybrid',fixture('controller',1),script='set-server-role.sh',extra=['--role','hybrid'])
 run_case('worker cannot become server by changing labels',fixture(),script='set-server-role.sh',extra=['--role','hybrid'],expect=1,reason='removed and rejoined')
 

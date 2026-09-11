@@ -58,6 +58,18 @@ for host, listener in [('k8s1.hosts.internal', 'apps'), ('test.internal', 'apps'
     check(route(host, listener), 'Internal hostnames must match')
 check(route('*.test.internal', 'test'), 'Routes require exact hostnames')
 check(route('fuzzy.elektrorecykling.pl', public=True), 'public exposure must be explicitly enabled')
+for target in ('rule', 'backend'):
+    bad = route('demo.internal')
+    parent = bad['spec']['rules'][0]
+    if target == 'backend':
+        parent = parent['backendRefs'][0]
+    parent['filters'] = [{'type': 'RequestHeaderModifier', 'requestHeaderModifier': {
+        'set': [{'name': 'X-Elektro-Subject', 'value': 'another-user'}]}}]
+    check(bad, 'Route filters can change verified identity')
+bad = route('demo.internal')
+bad['spec']['rules'][0]['filters'] = [{'type': 'RequestMirror', 'requestMirror': {
+    'backendRef': {'name': 'untrusted', 'namespace': 'app-demo', 'port': 8080}}}]
+check(bad, 'Route filters can change verified identity')
 grafana = render('infrastructure/monitoring-route/resources.yaml')[0]
 check(grafana)
 for host, listener, backend in [('grafana.internal', 'apps', 'grafana'),

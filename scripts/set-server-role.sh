@@ -35,9 +35,11 @@ if [[ $desired_role == controller ]]; then
     pods=$(kube get pods -A --field-selector "spec.nodeName=$node" -o json) || return 1
     jq -e 'all(.items[]; (.status.phase == "Succeeded" or .status.phase == "Failed") or
       (.metadata.namespace == "kube-system" and any(.metadata.ownerReferences[]?;
-        .kind == "DaemonSet" and (.name == "cilium" or .name == "cilium-envoy" or .name == "kube-vip"))))' <<<"$pods" >/dev/null
+        .kind == "DaemonSet" and (.name == "cilium" or .name == "cilium-envoy" or .name == "kube-vip"))) or
+      (.metadata.namespace == "monitoring" and .metadata.labels["elektro.local/metrics-component"] == "node-exporter"
+        and any(.metadata.ownerReferences[]?; .kind == "DaemonSet" and .name == "metrics-prometheus-node-exporter")))' <<<"$pods" >/dev/null
   }
-  wait_until 'non-network pods (including storage/GPU DaemonSets) to leave the dedicated controller' remaining_pods_gone
+  wait_until 'workload pods (including storage/GPU DaemonSets) to leave the dedicated controller; network agents and node-exporter may remain' remaining_pods_gone
 else
   kube label node "$node" elektro.local/role=hybrid elektro.local/workloads=true node.longhorn.io/create-default-disk=true --overwrite
   if kube get node "$node" -o json | jq -e 'any(.spec.taints[]?; .key == "elektro.local/dedicated" and .effect == "NoSchedule")' >/dev/null; then

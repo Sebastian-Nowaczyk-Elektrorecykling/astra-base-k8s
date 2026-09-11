@@ -74,6 +74,9 @@ spec:
   - expression: object.metadata.namespace == "edge"
     message: HTTPRoutes are managed centrally in edge.
   - expression: >-
+      object.spec.rules.all(r, !has(r.filters) && (!has(r.backendRefs) || r.backendRefs.all(b, !has(b.filters))))
+    message: Route filters can change verified identity headers or mirror requests; use direct Service routes.
+  - expression: >-
       object.spec.rules.all(r, !has(r.backendRefs) || r.backendRefs.all(b,
         !has(b.namespace) || b.namespace != 'monitoring' ||
         (variables.parent.name == 'platform' && variables.parent.sectionName == 'admin'

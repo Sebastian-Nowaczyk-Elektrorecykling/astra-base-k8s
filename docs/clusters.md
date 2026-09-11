@@ -1,6 +1,6 @@
 # Reusing the base for another cluster
 
-`laptops` is a **cluster profile name**, not a node count or hardware requirement. The base supports any number of registered nodes and any valid node names. Each Kubernetes cluster independently runs the same manifests in `infrastructure/` and the same Flux reconciliation graph in `clusters/base/`.
+`laptops` is a **cluster profile name**, not a node count or hardware requirement. The base supports any number of registered nodes. The installer accepts node names consisting of one lowercase DNS label, at most 63 characters. Each Kubernetes cluster independently runs the same manifests in `infrastructure/` and the same Flux reconciliation graph in `clusters/base/`.
 
 | Location | Ownership |
 | --- | --- |
@@ -22,6 +22,7 @@ Use **LAN addresses** for the API, DNS and gateway. `Node.status.addresses` call
 | Setting | What it means and what to enter |
 | --- | --- |
 | `CLUSTER_NAME` | The directory name, currently `laptops`. Set by the profile creator. |
+| `BASE_CONTRACT_VERSION` | Shared downstream interface version, currently `1`. Maintained by the base; do not override it to imply compatibility. See [the contract](platform-contract.md). |
 | `API_HOST` | Reachable controller LAN IP, initially your working `192.168.2.153`, or a tested stable API VIP/name. No scheme or port. It must be covered by the API certificate. |
 | `LAN_CIDR` | The actual wired LAN subnet and mask, initially `192.168.2.0/24`. The complete L2 service pool must be inside it. |
 | `EDGE_IP` | An unused **LAN virtual IP** for internal HTTPS applications. Cilium advertises it; do not assign it to a laptop interface. |
@@ -37,6 +38,7 @@ Use **LAN addresses** for the API, DNS and gateway. `Node.status.addresses` call
 | `IDENTITY_HOST` | `keycloak.admin.INTERNAL_DOMAIN` for private access. Existing cluster: `keycloak.admin.internal`. The public-exposure runbook covers changing the canonical issuer later. |
 | `PUBLIC_EDGE_IP` | Leave the shared default `NOT_CONFIGURED` until deliberately enabling the separate public gateway. |
 | `BGP_ENABLED`, `BGP_ROUTER_IP`, `BGP_LOCAL_ASN`, `BGP_PEER_ASN` | Leave shared defaults for ordinary L2 networking. See [optional EdgeRouter BGP](bgp.md) before enabling and adding its separate reconciliation stage. |
+| `API_VIP`, `API_VIP_INTERFACE` | Optional kube-vip address and wired interface; set both when enabling the [HA example](high-availability.md#add-controllers). The VIP must be on the LAN and outside the entire Cilium service pool. |
 | `PG_IMAGE` | Shared PostgreSQL image pin; normally leave the default. |
 | `FGA_STORE_ID`, `FGA_MODEL_ID` | Start with the shared `NOT_CONFIGURED` defaults. After initializing OpenFGA **on this cluster**, put its returned IDs in this profile. Do not reuse another cluster's IDs. |
 

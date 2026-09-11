@@ -24,6 +24,7 @@ curl --fail-with-body --silent --show-error --header @"$tmp/header" \
   --header 'Content-Type: application/json' --data-binary @"$repo/infrastructure/access/model.json" \
   "http://127.0.0.1:8080/stores/$store_id/authorization-models" >"$tmp/model.json"
 model_id=$(jq -er .authorization_model_id "$tmp/model.json")
-jq -n --arg store "$store_id" --arg model "$model_id" '{store_id:$store,authorization_model_id:$model}' >"$state"
+jq -n --arg store "$store_id" --arg model "$model_id" '{store_id:$store,authorization_model_id:$model}' >"$tmp/state.json"
+mv -- "$tmp/state.json" "$state"
 printf 'Set FGA_STORE_ID=%s and FGA_MODEL_ID=%s in clusters/%s/settings.yaml; commit and push.\n' "$store_id" "$model_id" "$cluster_name"
 echo 'No access has been granted. Add the first explicit principal tuple as described in docs/identity-access.md.'

@@ -19,6 +19,10 @@ for file in rendered/infrastructure-*.yaml; do
   # Admission was applied above; test its own remaining manifests without running workloads.
   kubectl apply --server-side --field-manager=elektro-validation --dry-run=server --validate=strict -f "$file" >/dev/null
 done
+for file in examples/backups/barman-release.yaml examples/backups/object-store.yaml \
+  examples/backups/scheduled-backup.yaml examples/backups/longhorn-target.yaml; do
+  kubectl apply --server-side --dry-run=server --validate=strict -f "$file" >/dev/null
+done
 kubectl apply --dry-run=server -f examples/cnpg-cluster.yaml -o json >.cache/cnpg-default.json
 python3 - <<'PY'
 import json

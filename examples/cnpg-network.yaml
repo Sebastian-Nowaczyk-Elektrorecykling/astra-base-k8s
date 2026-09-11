@@ -1,0 +1,29 @@
+# Apply with cnpg-cluster.yaml. Customize both the database and application labels.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: app-db
+  namespace: app-demo
+spec:
+  endpointSelector:
+    matchLabels:
+      cnpg.io/cluster: app-db
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        cnpg.io/cluster: app-db
+    - matchLabels:
+        app: demo
+    toPorts:
+    - ports:
+      - port: '5432'
+        protocol: TCP
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: cnpg-system
+    toPorts:
+    - ports:
+      - port: '8000'
+        protocol: TCP
+      - port: '5432'
+        protocol: TCP

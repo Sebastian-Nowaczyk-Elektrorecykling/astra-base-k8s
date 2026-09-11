@@ -8,7 +8,7 @@
 | `hybrid` | server with embedded etcd | Yes | Ordinary workloads allowed |
 | `worker` | agent | Yes | Ordinary workloads allowed |
 
-A dedicated controller is not an agentless k3s server: Cilium still needs a node, and control-plane networking should work without a second design. Network agents may tolerate its taint. Longhorn managers and system-managed storage components select workload-capable nodes. Taints do not stop privileged administrators from explicitly overriding scheduling, and changing labels does not evict existing pods.
+A dedicated controller is not an agentless k3s server: Cilium still needs a node, and control-plane networking should work without a second design. Network agents and the infrastructure monitoring node exporter tolerate its taint. Prometheus/Grafana and ordinary workloads remain on workload-capable nodes. Longhorn managers and system-managed storage components select workload-capable nodes. Taints do not stop privileged administrators from explicitly overriding scheduling, and changing labels does not evict existing pods.
 
 ## Add controllers
 
