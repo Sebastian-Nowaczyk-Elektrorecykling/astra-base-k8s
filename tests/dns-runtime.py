@@ -63,8 +63,12 @@ try:
         upstream_file.chmod(0o644)
 
         def start(container_name, mount, publish=()):
+            capabilities = pod['containers'][0]['securityContext']['capabilities']
+            assert capabilities['drop'] == ['ALL']
+            assert capabilities['add'] == ['NET_BIND_SERVICE']
             docker('run', '--detach', '--name', container_name, '--network', name,
                    '--user', f'{uid}:{uid}', '--read-only', '--cap-drop=ALL',
+                   '--cap-add=NET_BIND_SERVICE',
                    '--security-opt=no-new-privileges', '--volume', mount,
                    *publish, image, '-conf', '/etc/coredns/Corefile')
             containers.append(container_name)
