@@ -61,7 +61,7 @@ jobs:
           python tests/node-maintenance.py
           python tests/render.py --charts
       - name: Verify DNS answers, forwarding and live reloads
-        run: python tests/dns.py
+        run: python tests/dns-runtime.py
       - name: Validate admission against Kubernetes 1.36
         run: |
           kind create cluster --name elektro-validation --wait 120s --image kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
