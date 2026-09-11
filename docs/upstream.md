@@ -12,6 +12,7 @@ Reviewed 2026-09-09. These are exact starting versions, not a claim of permanent
 | Workstation Helm | `v4.2.4` | [release](https://github.com/helm/helm/releases/tag/v4.2.4) |
 | Workstation SOPS | `v3.13.3` | [release](https://github.com/getsops/sops/releases/tag/v3.13.3) |
 | Longhorn | chart `1.12.1`, V1 data engine | [release](https://github.com/longhorn/longhorn/releases/tag/v1.12.1) |
+| Metrics (reviewed 2026-09-11) | kube-prometheus-stack `90.0.0`, operator `v0.93.1`, Grafana chart `13.2.2` / app `13.2.1` | [release](https://github.com/prometheus-community/helm-charts/releases/tag/kube-prometheus-stack-90.0.0), [Grafana chart](https://github.com/grafana-community/helm-charts/blob/grafana-13.2.2/charts/grafana/Chart.yaml) |
 | CloudNativePG | chart `0.29.0`, operator `1.30.0` | [chart](https://github.com/cloudnative-pg/charts/releases/tag/cloudnative-pg-v0.29.0), [support](https://cloudnative-pg.io/docs/1.30/supported_releases/) |
 | PostgreSQL | `17.11-standard-trixie` | [official operand images](https://github.com/cloudnative-pg/postgres-containers) |
 | cert-manager | chart `v1.21.1` | [release](https://github.com/cert-manager/cert-manager/releases/tag/v1.21.1) |

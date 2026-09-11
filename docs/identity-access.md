@@ -53,12 +53,15 @@ Send it through the localhost port-forward using a header file, keeping credenti
 ```sh
 umask 077
 printf 'Authorization: Bearer %s\n' "$(cat local/openfga.key)" > local/openfga.header
-FGA_STORE_ID=$(jq -r .store_id local/openfga-state.json)
+# Use local/openfga-state.json instead only if retaining the legacy laptops state.
+FGA_STORE_ID=$(jq -r .store_id local/laptops/openfga-state.json)
 curl --fail-with-body --header @local/openfga.header --header 'Content-Type: application/json' \
   --data-binary @local/first-grant.json "http://127.0.0.1:8080/stores/$FGA_STORE_ID/write"
 ```
 
 For a group, write `principal:UUID member group:platform-admins` and then `group:platform-admins#member access service:longhorn.admin.internal`. Keycloak groups and OpenFGA groups are intentionally separate stores; nothing here falsely claims to synchronize them. Manage membership through OpenFGA's documented API/CLI or your future application's lifecycle. Back up the OpenFGA database. Do not store production user membership lists in this public repository.
+
+Grafana has its own explicit service grant and callback; see [metrics access](monitoring.md#enable-access-on-an-existing-cluster). A Longhorn grant does not grant Grafana access.
 
 ## Local users and Google
 

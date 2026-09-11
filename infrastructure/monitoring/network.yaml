@@ -1,0 +1,87 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: metrics-default-deny
+  namespace: monitoring
+spec:
+  endpointSelector: {}
+  enableDefaultDeny:
+    ingress: true
+  ingress: []
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: grafana-gateway
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      elektro.local/metrics-component: grafana
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: envoy-gateway-system
+            gateway.envoyproxy.io/owning-gateway-name: platform
+      toPorts:
+        - ports:
+            - {port: '3000', protocol: TCP}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: metrics-query
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchExpressions:
+      - key: elektro.local/metrics-component
+        operator: In
+        values: [prometheus, alertmanager]
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            elektro.local/metrics-component: grafana
+      toPorts:
+        - ports:
+            - {port: '9090', protocol: TCP}
+            - {port: '9093', protocol: TCP}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: metrics-scrape
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchExpressions:
+      - key: elektro.local/metrics-component
+        operator: In
+        values: [prometheus, alertmanager, operator, state-exporter, node-exporter]
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            elektro.local/metrics-component: prometheus
+      toPorts:
+        - ports:
+            - {port: '8080', protocol: TCP}
+            - {port: '8081', protocol: TCP}
+            - {port: '9090', protocol: TCP}
+            - {port: '9093', protocol: TCP}
+            - {port: '9100', protocol: TCP}
+            - {port: '10250', protocol: TCP}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: metrics-admission
+  namespace: monitoring
+spec:
+  endpointSelector:
+    matchLabels:
+      elektro.local/metrics-component: operator
+  ingress:
+    - fromEntities: [kube-apiserver, host, remote-node]
+      toPorts:
+        - ports:
+            - {port: '10250', protocol: TCP}

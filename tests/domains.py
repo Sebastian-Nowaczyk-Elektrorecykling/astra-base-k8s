@@ -58,6 +58,16 @@ for host, listener in [('k8s1.hosts.internal', 'apps'), ('test.internal', 'apps'
     check(route(host, listener), 'Internal hostnames must match')
 check(route('*.test.internal', 'test'), 'Routes require exact hostnames')
 check(route('fuzzy.elektrorecykling.pl', public=True), 'public exposure must be explicitly enabled')
+grafana = render('infrastructure/monitoring-route/resources.yaml')[0]
+check(grafana)
+for host, listener, backend in [('grafana.internal', 'apps', 'grafana'),
+                                ('other.admin.internal', 'admin', 'grafana'),
+                                ('grafana.admin.internal', 'admin', 'metrics-prometheus')]:
+    bad = copy.deepcopy(grafana)
+    bad['spec']['hostnames'] = [host]
+    bad['spec']['parentRefs'][0]['sectionName'] = listener
+    bad['spec']['rules'][0]['backendRefs'][0]['name'] = backend
+    check(bad, 'Monitoring backends are restricted')
 private_policy = render('infrastructure/access/resources.yaml')[0]
 broken_policy = copy.deepcopy(private_policy)
 broken_policy['spec']['targetRefs'].pop()
@@ -108,6 +118,8 @@ check(route(values['IDENTITY_HOST'], public=True), 'Public routes require the ex
 infra = route('fuzzy.elektrorecykling.pl', public=True)
 infra['spec']['rules'][0]['backendRefs'][0].update(namespace='identity', name='keycloak')
 check(infra, 'Public application routes must directly reference')
+infra['spec']['rules'][0]['backendRefs'][0].update(namespace='monitoring', name='grafana', port=80)
+check(infra, 'Monitoring backends are restricted')
 infra['spec']['rules'][0]['backendRefs'][0].update(namespace='kube-system', name='lan-dns', port=53)
 check(infra, 'Public application routes must directly reference')
 identity = render('examples/public-exposure/routes/resources.yaml', values)[0]
@@ -129,7 +141,7 @@ alternate = dict(settings, INTERNAL_DOMAIN='factory.internal', IDENTITY_HOST='ke
 subprocess.run(['kubectl', 'apply', '--server-side', '--field-manager=elektro-validation', '-f', '-'],
                input=yaml.safe_dump_all(render('infrastructure/admission/guards.yaml', alternate)),
                text=True, check=True, stdout=subprocess.DEVNULL)
-alternate_objects = [obj for part in ['edge', 'certificates', 'access', 'routes']
+alternate_objects = [obj for part in ['edge', 'certificates', 'access', 'routes', 'monitoring-route']
                      for obj in render(f'infrastructure/{part}/resources.yaml', alternate)]
 wait_for_admission([route('foo.factory.internal')] + alternate_objects,
                    'Second cluster domain was not accepted by every affected policy')

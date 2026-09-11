@@ -166,3 +166,10 @@ Configure your existing host/router firewall; the preparation script does not re
 Longhorn also needs its documented internal manager/engine/replica traffic between cluster nodes; permit trusted cluster-node traffic on the private LAN, or derive a full host firewall allowlist from the pinned Longhorn release before restricting it. Do not present the above as an exhaustive Longhorn firewall policy. The external boundary must not expose these internal ports or the full NodePort range.
 
 Keep an offline recovery kubeconfig and console/SSH access. Port-forward permissions are privileged and bypass the public gateway by design. An IdP failure must not be able to lock administrators out of repairing the IdP.
+
+## Metrics after bootstrap
+
+The shared base also installs the metrics stack. Register the Grafana callback on
+an existing realm and grant access to `grafana.admin.internal` following
+[metrics setup](monitoring.md#enable-access-on-an-existing-cluster). Fresh imports
+include the callback; no grants or external alert notifications are automatic.

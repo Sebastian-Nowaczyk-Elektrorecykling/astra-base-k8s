@@ -1,0 +1,73 @@
+# These targets are discovered by labels, never by a node/address inventory.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: longhorn
+  namespace: monitoring
+  labels:
+    release: metrics
+spec:
+  namespaceSelector:
+    matchNames: [longhorn-system]
+  selector:
+    matchLabels:
+      app: longhorn-manager
+  podMetricsEndpoints:
+    - portNumber: 9500
+      path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: platform-postgres
+  namespace: monitoring
+  labels:
+    release: metrics
+spec:
+  namespaceSelector:
+    matchNames: [identity, authorization]
+  selector:
+    matchExpressions:
+      - key: cnpg.io/cluster
+        operator: Exists
+  podMetricsEndpoints:
+    - port: metrics
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: prometheus-longhorn
+  namespace: longhorn-system
+spec:
+  endpointSelector:
+    matchLabels:
+      app: longhorn-manager
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            elektro.local/metrics-component: prometheus
+      toPorts:
+        - ports:
+            - {port: '9500', protocol: TCP}
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: prometheus-platform-postgres
+spec:
+  endpointSelector:
+    matchExpressions:
+      - key: k8s:io.kubernetes.pod.namespace
+        operator: In
+        values: [identity, authorization]
+      - key: cnpg.io/cluster
+        operator: Exists
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            elektro.local/metrics-component: prometheus
+      toPorts:
+        - ports:
+            - {port: '9187', protocol: TCP}

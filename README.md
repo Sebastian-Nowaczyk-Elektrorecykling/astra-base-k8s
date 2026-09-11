@@ -51,7 +51,7 @@ Continue with the runbook; this command alone does not install the platform. Sup
 | LAN machines | `k8s1.hosts.internal`, `k8s2.hosts.internal`, `k8s3.hosts.internal` | Each machine's LAN IP |
 | Test deployments | `foo-a7c92e.test.internal`, `foo-b41d08.test.internal` | Private gateway `EDGE_IP` |
 | Staging | `foo.staging.internal` | Private gateway `EDGE_IP` |
-| Administration | `keycloak.admin.internal`, `longhorn.admin.internal` | Private gateway `EDGE_IP` |
+| Administration | `keycloak.admin.internal`, `longhorn.admin.internal`, `grafana.admin.internal` | Private gateway `EDGE_IP` |
 | Applications / production | `foo.internal`, `bar.internal` | Private gateway `EDGE_IP` |
 
 Point clients at the CoreDNS service's **LAN** `DNS_IP`, directly or through DHCP. Configure `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS` in `clusters/laptops/settings.yaml`; see [LAN DNS setup](docs/dns.md). Registered node addresses are discovered automatically from k3s; unknown machine names return NXDOMAIN. Wildcard DNS and certificates support new application names; each application still needs an exact route, callback and permission grant. The separate application-platform Flux repository owns deployment naming and lifecycle.
@@ -70,7 +70,7 @@ The chart does not create its own StorageClass. Kyverno mutates **CNPG Cluster r
 
 ## Access defaults
 
-`https://longhorn.admin.internal` requires Keycloak login **and** an OpenFGA `service:<hostname>#access` grant. No grants are installed automatically. Keycloak itself is the explicit native-authentication exception at `https://keycloak.admin.internal`; putting the login service behind its own login requirement would create a loop. Databases, the Kubernetes API and cluster management protocols use their native credentials and network boundaries.
+`https://longhorn.admin.internal` and `https://grafana.admin.internal` require Keycloak login **and** an OpenFGA `service:<hostname>#access` grant. No grants are installed automatically. Keycloak itself is the explicit native-authentication exception at `https://keycloak.admin.internal`; putting the login service behind its own login requirement would create a loop. Databases, the Kubernetes API and cluster management protocols use their native credentials and network boundaries.
 
 Routes are centrally managed in `edge`. New application routes inherit their selected internal listener's security policy. Kubernetes admission permits the restricted LAN DNS service and managed gateways, and blocks NodePort/other LoadBalancer services, external IPs, alternate ingress APIs and per-route security overrides. Cilium blocks direct ingress into application pods and restricts the Longhorn UI, identity and authorization services. Kubernetes administrators, node root access and permission to port-forward are trusted infrastructure administration paths.
 
@@ -81,6 +81,7 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 - [Bootstrap](docs/bootstrap.md)
 - [Cluster settings, DHCP and multiple clusters](docs/clusters.md)
 - [LAN DNS](docs/dns.md)
+- [Metrics, Grafana access and retention](docs/monitoring.md)
 - [Identity, dynamic projects, agents and OpenFGA](docs/identity-access.md)
 - [HA and node roles](docs/high-availability.md)
 - [Change roles, remove nodes and rejoin](docs/node-role-changes.md)

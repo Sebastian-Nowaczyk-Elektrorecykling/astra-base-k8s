@@ -73,6 +73,15 @@ spec:
   validations:
   - expression: object.metadata.namespace == "edge"
     message: HTTPRoutes are managed centrally in edge.
+  - expression: >-
+      object.spec.rules.all(r, !has(r.backendRefs) || r.backendRefs.all(b,
+        !has(b.namespace) || b.namespace != 'monitoring' ||
+        (variables.parent.name == 'platform' && variables.parent.sectionName == 'admin'
+          && object.spec.hostnames == ['grafana.admin.${INTERNAL_DOMAIN}']
+          && b.name == 'grafana' && b.port == 80
+          && (!has(b.group) || b.group == '') && (!has(b.kind) || b.kind == 'Service')
+          && !has(b.filters) && !has(r.filters))))
+    message: Monitoring backends are restricted to Grafana on its private administration hostname.
   - expression: has(object.spec.parentRefs) && object.spec.parentRefs.size() == 1 && (!has(variables.parent.group) ||
       variables.parent.group == 'gateway.networking.k8s.io') && (!has(variables.parent.kind) || variables.parent.kind
       == 'Gateway') && (!has(variables.parent.namespace) || variables.parent.namespace == 'edge') && has(variables.parent.sectionName)
@@ -102,7 +111,7 @@ spec:
       has(m.path) && m.path.type == ''PathPrefix'' && m.path.value in [''/realms/elektro'',''/resources'']))))'
     message: Only Keycloak may use the native identity listener; public identity paths exclude administration.
   - expression: '!variables.public || variables.native || object.spec.rules.all(r, !has(r.filters) && has(r.backendRefs)
-      && r.backendRefs.size() > 0 && r.backendRefs.all(b, has(b.namespace) && !(b.namespace in [''kube-system'',''flux-system'',''identity'',''authorization'',''edge'',''envoy-gateway-system'',''cert-manager'',''kyverno'',''longhorn-system'',''cnpg-system'',''gpu-system'',''dns-system''])
+      && r.backendRefs.size() > 0 && r.backendRefs.all(b, has(b.namespace) && !(b.namespace in [''kube-system'',''flux-system'',''identity'',''authorization'',''edge'',''envoy-gateway-system'',''cert-manager'',''kyverno'',''longhorn-system'',''cnpg-system'',''gpu-system'',''dns-system'',''monitoring''])
       && (!has(b.group) || b.group == '''') && (!has(b.kind) || b.kind == ''Service'') && !has(b.filters)))'
     message: Public application routes must directly reference application Services without filters or infrastructure
       backends.
@@ -396,7 +405,7 @@ spec:
   matchConditions:
   - name: condition-0
     expression: '!(request.namespace in ["kube-system", "kube-public", "kube-node-lease", "flux-system", "longhorn-system",
-      "cnpg-system", "cert-manager", "kyverno", "envoy-gateway-system", "gpu-system", "identity", "authorization", "edge"])'
+      "cnpg-system", "cert-manager", "kyverno", "envoy-gateway-system", "gpu-system", "identity", "authorization", "edge", "monitoring"])'
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding

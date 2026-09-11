@@ -55,6 +55,7 @@ spec:
       - authorization
       - edge
       - dns-system
+      - monitoring
   ingress:
   - fromEndpoints:
     - matchLabels:

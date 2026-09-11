@@ -1,0 +1,251 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: metrics
+  namespace: monitoring
+spec:
+  interval: 30m
+  timeout: 15m
+  releaseName: metrics
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: '90.0.0'
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: flux-system
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    fullnameOverride: metrics
+    # k3s embeds these components and binds their metrics to loopback. There is
+    # no kube-proxy with this Cilium configuration. Do not invent node endpoints.
+    kubeEtcd:
+      enabled: false
+    kubeControllerManager:
+      enabled: false
+    kubeScheduler:
+      enabled: false
+    kubeProxy:
+      enabled: false
+    defaultRules:
+      rules:
+        etcd: false
+        kubeControllerManager: false
+        kubeSchedulerAlerting: false
+        kubeSchedulerRecording: false
+        kubeProxy: false
+        windows: false
+    kubelet:
+      serviceMonitor:
+        cAdvisorInterval: 30s
+    prometheusOperator:
+      nodeSelector:
+        elektro.local/workloads: 'true'
+      podLabels:
+        elektro.local/metrics-component: operator
+      resources:
+        requests: {cpu: 50m, memory: 128Mi}
+        limits: {memory: 384Mi}
+      # Use the existing cert-manager; no certificate patch/setup hook jobs.
+      admissionWebhooks:
+        patch:
+          enabled: false
+        certManager:
+          enabled: true
+    prometheus:
+      prometheusSpec:
+        replicas: 1
+        nodeSelector:
+          elektro.local/workloads: 'true'
+        podMetadata:
+          labels:
+            elektro.local/metrics-component: prometheus
+        externalLabels:
+          cluster: ${CLUSTER_NAME}
+        scrapeInterval: 30s
+        evaluationInterval: 30s
+        retention: 7d
+        retentionSize: 15GB
+        walCompression: true
+        enableAdminAPI: false
+        enableRemoteWriteReceiver: false
+        resources:
+          requests: {cpu: 200m, memory: 512Mi}
+          limits: {memory: 2Gi}
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn
+              accessModes: [ReadWriteOnce]
+              resources:
+                requests:
+                  storage: 20Gi
+        # Only administrators can install monitors/rules in this namespace.
+        # Do not accept arbitrary scrape configuration from application tenants.
+        serviceMonitorNamespaceSelector:
+          matchLabels: {kubernetes.io/metadata.name: monitoring}
+        podMonitorNamespaceSelector:
+          matchLabels: {kubernetes.io/metadata.name: monitoring}
+        ruleNamespaceSelector:
+          matchLabels: {kubernetes.io/metadata.name: monitoring}
+        probeNamespaceSelector:
+          matchLabels: {kubernetes.io/metadata.name: monitoring}
+        scrapeConfigNamespaceSelector:
+          matchLabels: {kubernetes.io/metadata.name: monitoring}
+        serviceMonitorSelector: {matchLabels: {release: metrics}}
+        podMonitorSelector: {matchLabels: {release: metrics}}
+        ruleSelector: {matchLabels: {release: metrics}}
+        probeSelector: {matchLabels: {release: metrics}}
+        scrapeConfigSelector: {matchLabels: {release: metrics}}
+        arbitraryFSAccessThroughSMs:
+          deny: true
+        overrideHonorLabels: true
+        enforcedSampleLimit: 100000
+        enforcedTargetLimit: 1000
+        enforcedLabelLimit: 100
+        enforcedLabelNameLengthLimit: 200
+        enforcedLabelValueLengthLimit: 2048
+    alertmanager:
+      alertmanagerSpec:
+        replicas: 1
+        nodeSelector:
+          elektro.local/workloads: 'true'
+        podMetadata:
+          labels:
+            elektro.local/metrics-component: alertmanager
+        retention: 120h
+        alertmanagerConfigNamespaceSelector:
+          matchLabels: {kubernetes.io/metadata.name: monitoring}
+        alertmanagerConfigSelector: {matchLabels: {release: metrics}}
+        resources:
+          requests: {cpu: 25m, memory: 64Mi}
+          limits: {memory: 256Mi}
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn
+              accessModes: [ReadWriteOnce]
+              resources:
+                requests:
+                  storage: 1Gi
+    kube-state-metrics:
+      nodeSelector:
+        elektro.local/workloads: 'true'
+      podLabels:
+        elektro.local/metrics-component: state-exporter
+      resources:
+        requests: {cpu: 25m, memory: 64Mi}
+        limits: {memory: 256Mi}
+    prometheus-node-exporter:
+      # Keep port 9100 off the LAN and subject to Cilium endpoint policy.
+      # Host /proc, /sys and / are read-only mounts; see monitoring.md for the
+      # network-namespace limitation of running without hostNetwork.
+      hostNetwork: false
+      dnsPolicy: ClusterFirst
+      service:
+        enableHostPort: false
+      podLabels:
+        elektro.local/metrics-component: node-exporter
+      resources:
+        requests: {cpu: 20m, memory: 32Mi}
+        limits: {memory: 128Mi}
+    grafana:
+      fullnameOverride: grafana
+      serviceMonitor:
+        enabled: false
+      replicas: 1
+      deploymentStrategy:
+        type: Recreate
+      nodeSelector:
+        elektro.local/workloads: 'true'
+      podLabels:
+        elektro.local/metrics-component: grafana
+      persistence:
+        enabled: true
+        storageClassName: longhorn
+        accessModes: [ReadWriteOnce]
+        size: 2Gi
+      initChownData:
+        enabled: false
+      resources:
+        requests: {cpu: 100m, memory: 128Mi}
+        limits: {memory: 512Mi}
+      env:
+        # Also tells the upstream chart not to create password credentials.
+        GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: 'true'
+      grafana.ini:
+        server:
+          domain: grafana.admin.${INTERNAL_DOMAIN}
+          root_url: https://grafana.admin.${INTERNAL_DOMAIN}
+        analytics:
+          reporting_enabled: false
+          check_for_updates: false
+        security:
+          cookie_secure: true
+          cookie_samesite: lax
+          allow_embedding: false
+        auth:
+          disable_login_form: true
+          disable_signout_menu: true
+        auth.basic:
+          enabled: false
+        auth.anonymous:
+          enabled: false
+        auth.proxy:
+          enabled: true
+          header_name: X-Elektro-Subject
+          header_property: username
+          auto_sign_up: true
+          enable_login_token: false
+          whitelist: ${POD_CIDR}
+        users:
+          allow_sign_up: false
+          allow_org_create: false
+          auto_assign_org_role: Viewer
+        dashboards:
+          default_home_dashboard_path: /tmp/dashboards/k8s-resources-cluster.json
+      rbac:
+        namespaced: true
+      defaultDashboardsEditable: false
+      sidecar:
+        resources:
+          requests: {cpu: 10m, memory: 64Mi}
+          limits: {memory: 192Mi}
+        dashboards:
+          searchNamespace: monitoring
+          resource: configmap
+          # Grafana polls files; reload APIs require a local admin password.
+          skipReload: true
+        datasources:
+          enabled: false
+      datasources:
+        datasources.yaml:
+          apiVersion: 1
+          datasources:
+            - name: Prometheus
+              uid: prometheus
+              type: prometheus
+              access: proxy
+              url: http://metrics-prometheus.monitoring.svc.cluster.local:9090
+              isDefault: true
+              editable: false
+              jsonData:
+                timeInterval: 30s
+                httpMethod: POST
+            - name: Alertmanager
+              uid: alertmanager
+              type: alertmanager
+              access: proxy
+              url: http://metrics-alertmanager.monitoring.svc.cluster.local:9093
+              editable: false
+              jsonData:
+                implementation: prometheus
+                handleGrafanaManagedAlerts: false

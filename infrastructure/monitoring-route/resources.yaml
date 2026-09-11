@@ -1,0 +1,31 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana
+  namespace: edge
+spec:
+  parentRefs:
+    - name: platform
+      sectionName: admin
+  hostnames:
+    - grafana.admin.${INTERNAL_DOMAIN}
+  rules:
+    - backendRefs:
+        - name: grafana
+          namespace: monitoring
+          port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: edge-grafana
+  namespace: monitoring
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: edge
+  to:
+    - group: ''
+      kind: Service
+      name: grafana

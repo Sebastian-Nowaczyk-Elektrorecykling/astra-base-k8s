@@ -62,3 +62,14 @@ Create a temporary ordinary PVC without a class and verify `longhorn`; create CN
 After extending to three servers, test the API VIP and one controller loss, keeping two healthy etcd members. Verify CNPG and volume failover independently of the API. A one-instance database or one-copy Longhorn disk cannot pass a test that requires an independent surviving data copy.
 
 Run the GPU Job on each supported GPU node after kernel/driver/runtime changes. Do not infer a usable GPU from a node label alone.
+
+## Metrics checks
+
+`tests/metrics.py` checks the actual rendered chart for private Services, restricted
+monitor discovery, namespaced dashboard permissions, and Grafana proxy settings.
+`--runtime` installs the upstream cert-manager and metrics charts in the disposable
+kind cluster and verifies startup, node/kubelet ingestion, dashboard provisioning,
+anonymous denials, stable subject identity, and Viewer permissions. It uses temporary
+volumes and a localhost proxy allowlist for CI. The existing CEL suite rejects
+public monitoring aliases and routes to Prometheus. Cilium enforcement and the
+complete login/OpenFGA chain require the [LAN acceptance checks](monitoring.md#verification-and-troubleshooting).

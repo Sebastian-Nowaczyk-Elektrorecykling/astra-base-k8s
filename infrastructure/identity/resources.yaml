@@ -6,19 +6,60 @@ metadata:
   annotations:
     kustomize.toolkit.fluxcd.io/substitute: disabled
 data:
-  elektro-realm.json: "{\n  \"realm\": \"elektro\",\n  \"enabled\": true,\n  \"registrationAllowed\": false,\n  \"loginWithEmailAllowed\"\
-    : true,\n  \"duplicateEmailsAllowed\": false,\n  \"resetPasswordAllowed\": true,\n  \"bruteForceProtected\"\
-    : true,\n  \"sslRequired\": \"external\",\n  \"accessTokenLifespan\": 300,\n  \"roles\": {\n    \"realm\": [\n\
-    \      {\n        \"name\": \"platform-admin\"\n      }\n    ]\n  },\n  \"clients\": [\n    {\n      \"clientId\"\
-    : \"elektro-edge\",\n      \"name\": \"Elektro protected gateway\",\n      \"enabled\": true,\n      \"protocol\"\
-    : \"openid-connect\",\n      \"publicClient\": false,\n      \"secret\": \"${EDGE_OIDC_CLIENT_SECRET}\",\n \
-    \     \"standardFlowEnabled\": true,\n      \"directAccessGrantsEnabled\": false,\n      \"serviceAccountsEnabled\"\
-    : false,\n      \"fullScopeAllowed\": false,\n      \"redirectUris\": [\n        \"https://longhorn.admin.${INTERNAL_DOMAIN}/oauth2/callback\"\
-    \n      ],\n      \"webOrigins\": [],\n      \"defaultClientScopes\": [\n        \"profile\",\n        \"email\"\
-    \n      ],\n      \"protocolMappers\": [\n        {\n          \"name\": \"edge-audience\",\n          \"protocol\"\
-    : \"openid-connect\",\n          \"protocolMapper\": \"oidc-audience-mapper\",\n          \"config\": {\n  \
-    \          \"included.client.audience\": \"elektro-edge\",\n            \"access.token.claim\": \"true\",\n  \
-    \          \"id.token.claim\": \"false\"\n          }\n        }\n      ]\n    }\n  ]\n}"
+  elektro-realm.json: |
+    {
+      "realm": "elektro",
+      "enabled": true,
+      "registrationAllowed": false,
+      "loginWithEmailAllowed": true,
+      "duplicateEmailsAllowed": false,
+      "resetPasswordAllowed": true,
+      "bruteForceProtected": true,
+      "sslRequired": "external",
+      "accessTokenLifespan": 300,
+      "roles": {
+        "realm": [
+          {
+            "name": "platform-admin"
+          }
+        ]
+      },
+      "clients": [
+        {
+          "clientId": "elektro-edge",
+          "name": "Elektro protected gateway",
+          "enabled": true,
+          "protocol": "openid-connect",
+          "publicClient": false,
+          "secret": "${EDGE_OIDC_CLIENT_SECRET}",
+          "standardFlowEnabled": true,
+          "directAccessGrantsEnabled": false,
+          "serviceAccountsEnabled": false,
+          "fullScopeAllowed": false,
+          "redirectUris": [
+            "https://longhorn.admin.${INTERNAL_DOMAIN}/oauth2/callback",
+            "https://grafana.admin.${INTERNAL_DOMAIN}/oauth2/callback"
+          ],
+          "webOrigins": [],
+          "defaultClientScopes": [
+            "profile",
+            "email"
+          ],
+          "protocolMappers": [
+            {
+              "name": "edge-audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "config": {
+                "included.client.audience": "elektro-edge",
+                "access.token.claim": "true",
+                "id.token.claim": "false"
+              }
+            }
+          ]
+        }
+      ]
+    }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -53,6 +94,8 @@ spec:
         - start
         - --import-realm
         env:
+        - name: INTERNAL_DOMAIN
+          value: ${INTERNAL_DOMAIN}
         - name: KC_DB
           value: postgres
         - name: KC_DB_URL

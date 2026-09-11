@@ -131,7 +131,8 @@ def static():
     assert {t["sectionName"] for t in sp["targetRefs"]} == {"admin", "test", "staging", "apps"}
     assert set(configured(ROOT / "infrastructure/certificates/resources.yaml", settings)[-1]["spec"]["dnsNames"]) == {
         "*.internal", "*.admin.internal", "*.test.internal", "*.staging.internal"}
-    assert client["redirectUris"] == ["https://longhorn.admin.internal/oauth2/callback"]
+    assert client["redirectUris"] == ["https://longhorn.admin.internal/oauth2/callback",
+                                      "https://grafana.admin.internal/oauth2/callback"]
     assert not any("public-exposure" in p["spec"]["path"] for p in phases), "Public exposure must remain opt-in"
     for p in (ROOT / "infrastructure").rglob("*.yaml"):
         assert not any(d.get("kind") == "Gateway" and d["metadata"]["name"] == "public" for d in read(p))
