@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lan-dns-forwarding
+  namespace: kube-system
+data: {}
+# Optional: add a KEY.server entry with a CoreDNS block listening on :1053.
+# See docs/clusters.md for forwarding another cluster's private zone.

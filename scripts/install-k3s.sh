@@ -3,9 +3,10 @@ set -euo pipefail
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 # shellcheck source=../bootstrap/versions.env
 source "$repo/bootstrap/versions.env"
-role='' node_name='' node_ip='' config='' server='' token_file='' init=false
+role='' node_name='' node_ip=auto config='' server='' token_file='' init=false print_config=false
 usage() {
-  echo 'Usage: install-k3s.sh --role controller|hybrid|worker --name NAME --ip IPv4 --config FILE (--init | --server https://HOST:6443 --token-file FILE)'
+  echo 'Use --print-config to review the generated configuration without changing the machine.'
+  echo 'Usage: install-k3s.sh --role controller|hybrid|worker --name NAME [--ip auto|IPv4] --config FILE (--init | --server https://HOST:6443 --token-file FILE)'
 }
 while (($#)); do
   case $1 in
@@ -16,15 +17,17 @@ while (($#)); do
     --server) server=${2:?}; shift 2 ;;
     --token-file) token_file=${2:?}; shift 2 ;;
     --init) init=true; shift ;;
+    --print-config) print_config=true; shift ;;
     --help|-h) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
 done
-[[ $EUID -eq 0 ]] || { echo 'Run as root.' >&2; exit 1; }
-[[ $role =~ ^(controller|hybrid|worker)$ && $node_name =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ && $node_ip =~ ^[0-9.]+$ && -f $config ]] || { usage >&2; exit 2; }
+[[ $role =~ ^(controller|hybrid|worker)$ && $node_name =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ && ( $node_ip == auto || $node_ip =~ ^[0-9.]+$ ) && -f $config ]] || { usage >&2; exit 2; }
 # This is an administrator-controlled shell config; never source untrusted input.
 # shellcheck source=/dev/null
 source "$config"
+INTERNAL_DOMAIN=${INTERNAL_DOMAIN:-internal}
+[[ $INTERNAL_DOMAIN =~ ^[a-z0-9][a-z0-9.-]*$ ]] || { echo "Invalid INTERNAL_DOMAIN" >&2; exit 2; }
 for name in API_HOST POD_CIDR SERVICE_CIDR CLUSTER_DNS; do
   [[ ${!name:-} =~ ^[A-Za-z0-9./-]+$ ]] || { echo "Missing or invalid $name" >&2; exit 2; }
 done
@@ -33,36 +36,23 @@ if $init; then
 else
   [[ $server =~ ^https://[A-Za-z0-9.-]+:6443$ && -s $token_file ]] || { usage >&2; exit 2; }
 fi
-# Refuse to overwrite live configuration or turn an agent into a server in place.
-if [[ -e /etc/rancher/k3s/config.yaml || -d /var/lib/rancher/k3s/server/db || -e /etc/systemd/system/k3s-agent.service ]]; then
-  echo 'Existing k3s installation found. Use docs/node-role-changes.md for role changes; do not overwrite a live installation.' >&2; exit 1
-fi
-# A removed Cilium node must reboot to clear any residual kernel/BPF state before rejoining.
-reboot_marker=/var/lib/elektro-k3s/rejoin-requires-reboot
-if [[ -f $reboot_marker && $(cat "$reboot_marker") == "$(cat /proc/sys/kernel/random/boot_id)" ]]; then
-  echo 'Reboot this removed node before rejoining so Cilium starts with clean kernel state.' >&2; exit 1
-fi
-[[ -z $(swapon --noheadings --show) ]] || { echo 'Disable swap first.' >&2; exit 1; }
-install -d -m 0700 /etc/rancher/k3s
-umask 077
-if ! $init; then install -m 0600 "$token_file" /etc/rancher/k3s/join-token; fi
-cfg=/etc/rancher/k3s/config.yaml
-cat >"$cfg" <<EOF
+render_config() {
+cat <<EOF
 node-name: "$node_name"
-node-ip: "$node_ip"
 node-label:
   - "elektro.local/role=$role"
   - "elektro.local/workloads=$([[ $role == controller ]] && echo false || echo true)"
   - "node.longhorn.io/create-default-disk=$([[ $role == controller ]] && echo false || echo true)"
 EOF
+if [[ $node_ip != auto ]]; then printf 'node-ip: "%s"\n' "$node_ip"; fi
 if [[ $role == controller ]]; then
-  cat >>"$cfg" <<'EOF'
+  cat <<'EOF'
 node-taint:
   - "elektro.local/dedicated=control-plane:NoSchedule"
 EOF
 fi
 if [[ $role != worker ]]; then
-  cat >>"$cfg" <<EOF
+  cat <<EOF
 flannel-backend: none
 disable-network-policy: true
 disable-kube-proxy: true
@@ -78,19 +68,37 @@ secrets-encryption: true
 write-kubeconfig-mode: "0600"
 tls-san:
   - "$API_HOST"
-  - "$node_name.hosts.internal"
+  - "$node_name.hosts.$INTERNAL_DOMAIN"
 etcd-snapshot-schedule-cron: "0 */6 * * *"
 etcd-snapshot-retention: 12
 EOF
 fi
 if $init; then
-  echo 'cluster-init: true' >>"$cfg"
+  echo 'cluster-init: true'
 else
-  cat >>"$cfg" <<EOF
+  cat <<EOF
 server: "$server"
 token-file: /etc/rancher/k3s/join-token
 EOF
 fi
+}
+if $print_config; then render_config; exit 0; fi
+[[ $EUID -eq 0 ]] || { echo 'Run as root.' >&2; exit 1; }
+# Refuse to overwrite live configuration or turn an agent into a server in place.
+if [[ -e /etc/rancher/k3s/config.yaml || -d /var/lib/rancher/k3s/server/db || -e /etc/systemd/system/k3s-agent.service ]]; then
+  echo 'Existing k3s installation found. Use docs/node-role-changes.md for role changes; do not overwrite a live installation.' >&2; exit 1
+fi
+# A removed Cilium node must reboot to clear any residual kernel/BPF state before rejoining.
+reboot_marker=/var/lib/elektro-k3s/rejoin-requires-reboot
+if [[ -f $reboot_marker && $(cat "$reboot_marker") == "$(cat /proc/sys/kernel/random/boot_id)" ]]; then
+  echo 'Reboot this removed node before rejoining so Cilium starts with clean kernel state.' >&2; exit 1
+fi
+[[ -z $(swapon --noheadings --show) ]] || { echo 'Disable swap first.' >&2; exit 1; }
+install -d -m 0700 /etc/rancher/k3s
+umask 077
+if ! $init; then install -m 0600 "$token_file" /etc/rancher/k3s/join-token; fi
+cfg=/etc/rancher/k3s/config.yaml
+render_config >"$cfg"
 installer=$(mktemp)
 trap 'rm -f "$installer"' EXIT
 # Versioned upstream installer; it verifies the release binary against upstream checksums.

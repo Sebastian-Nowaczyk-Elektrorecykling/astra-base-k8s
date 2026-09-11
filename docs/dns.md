@@ -1,26 +1,26 @@
 # LAN DNS
 
-The base deploys upstream **CoreDNS 1.14.7** as `dns-system/lan-dns`. Point a client machine's DNS setting at **`DNS_IP`**, or advertise that address through your router's DHCP DNS option. It answers internal names and forwards other queries to the configured upstream resolvers. TCP and UDP port 53 use the same stable Cilium LoadBalancer IP. There is no DNS controller, web UI, database or persistent volume.
+The base deploys upstream **CoreDNS 1.14.7** as `kube-system/lan-dns`. Point a client machine's DNS setting at **`DNS_IP`**, or advertise that address through your router's DHCP DNS option. It answers internal names and forwards other queries to the configured upstream resolvers. TCP and UDP port 53 use the same stable Cilium LoadBalancer IP. Node records follow k3s's existing node discovery; no additional controller, web UI, database or persistent volume is installed.
 
 ## Configure and reconcile
 
-Edit the tracked `clusters/laptops/settings.yaml`, retaining your actual API and other cluster settings:
+Edit the tracked `clusters/laptops/settings.yaml`, retaining your actual API and other cluster settings. See [the settings reference](clusters.md#what-to-put-in-settingsyaml) for every field and the distinction between LAN and cluster-private IPs:
 
 ```yaml
   EDGE_IP: 192.168.50.240
   DNS_IP: 192.168.50.242
   DNS_CLIENT_CIDR: 192.168.50.0/24
   DNS_UPSTREAMS: '1.1.1.1 9.9.9.9'
-  K8S1_IP: 192.168.50.11
-  K8S2_IP: 192.168.50.12
-  K8S3_IP: 192.168.50.13
+  INTERNAL_DOMAIN: internal
 ```
 
 These are **examples**, not discovered LAN addresses. Reserve `DNS_IP` outside DHCP and inside your existing `LB_START`–`LB_STOP` pool, distinct from `EDGE_IP`, any public gateway, API VIP and physical machine. `DNS_CLIENT_CIDR` is the IPv4 subnet allowed to query the resolver; set it to your real LAN. Cilium's LoadBalancer source filtering and a pod ingress policy enforce this boundary. Do not forward TCP/UDP 53 from the Internet. To admit a separate routed VPN subnet, extend the Service source ranges, DNS network policy and the corresponding admission validation together through Git.
 
 `DNS_UPSTREAMS` is a space-separated list of **IPv4 resolver addresses**, optionally `IP:port`, in preference order. You can use your router or company DNS instead of the example public resolvers, provided it does not forward these same queries back to `DNS_IP`. Do not use `DNS_IP`, kube-dns, loopback addresses or `/etc/resolv.conf` as upstreams. CoreDNS forwards to these explicit addresses; it does not inherit a client's DNS or recursively forward through itself. It tries another upstream on transport failure; configure resolvers with consistent answers, since an upstream NXDOMAIN is an answer, not a failover signal.
 
-The three machine addresses are independent of `API_HOST`, which may later become an API VIP. Add other LAN machines as exact records in `infrastructure/dns/hosts.db`; this is a Git-managed inventory, not automatic discovery. No wildcard belongs in that file.
+There is no node IP list to edit. k3s updates `kube-system/coredns.data.NodeHosts` from registered Nodes, including their reported LAN `InternalIP`; the LAN resolver mounts that key read-only. Adding a node, changing its reported address or deleting its Node updates DNS automatically. A NotReady/cordoned node keeps its record. This is the same Kubernetes node information visible in Headlamp. See [DHCP and dynamic node DNS](clusters.md#dhcp-and-dynamic-node-dns) for automatic worker IP selection, the stable API requirement and optional records for machines outside Kubernetes.
+
+The examples below use `INTERNAL_DOMAIN: internal`. Another profile can use a suffix such as `production.internal`; all private application groups, node names, certificates and route policies use that profile's suffix. [Multi-cluster setup](clusters.md#two-clusters-on-the-same-lan) covers separate IP pools and conditional forwarding.
 
 Commit/push the settings and reconcile from your workstation:
 
@@ -32,17 +32,19 @@ flux reconcile kustomization admission
 flux reconcile kustomization network
 flux reconcile kustomization dns
 flux reconcile kustomization cluster-dns
-kubectl -n dns-system rollout status deployment/lan-dns --timeout=5m
-kubectl -n dns-system get service lan-dns
+kubectl -n kube-system rollout status deployment/lan-dns --timeout=5m
+kubectl -n kube-system get service lan-dns
 ```
 
 The normal Flux dependency graph performs this ordering automatically. Existing clusters do not need another Cilium/Flux bootstrap. `local/cluster.env` does not configure this service; Flux reads the tracked settings. Wait for the Service's `EXTERNAL-IP` to equal `DNS_IP`, then test it before changing client DNS. A pending IP usually means the address is outside the pool, already allocated, or the updated network resources have not reconciled.
+
+If you installed the earlier `dns-system/lan-dns`, Flux moves it to `kube-system` so it can mount k3s's ConfigMap without API credentials. Expect a DNS interruption while the old Service releases `DNS_IP` and the replacement acquires it. Keep independent DNS for the nodes/workstation during this maintenance, then verify the new Service. The empty legacy namespace is retained to avoid automatic namespace deletion. Existing `.internal` application names, credentials and data do not change. Remove obsolete `K8S1_IP`/`K8S2_IP`/`K8S3_IP` overrides from any local branch; they are no longer used.
 
 ## Answers and client setup
 
 | Query | Answer |
 | --- | --- |
-| `k8s1.hosts.internal` (and other exact inventory entries) | That machine's configured address |
+| `k8s1.hosts.internal`, `gpu-west.hosts.internal` (any registered node) | That node's current reported LAN address |
 | `missing.hosts.internal` | NXDOMAIN, never the gateway |
 | `foo.internal`, `longhorn.admin.internal`, `foo.staging.internal` | `EDGE_IP` |
 | `foo-a7c92e.test.internal`, `foo-b41d08.test.internal` | `EDGE_IP`; no DNS edit per test deployment |
@@ -79,9 +81,9 @@ DNS does not install the private TLS root on clients. Complete the [CA trust ste
 
 ## Pods, updates and availability
 
-The `cluster-dns` reconciliation supplies the **supported k3s `coredns-custom` import** for `internal`, forwarding only that zone to `DNS_IP`. Pods continue using kube-dns for `*.svc.cluster.local` and their normal external forwarding. The LAN resolver does not expose Kubernetes Service discovery. If you already maintain a `kube-system/coredns-custom` ConfigMap outside this repository, merge its existing custom keys into this repository's manifest before reconciliation. Do not replace k3s's main `coredns` ConfigMap.
+The `cluster-dns` reconciliation supplies the **supported k3s `coredns-custom` import** for `INTERNAL_DOMAIN`, forwarding only that zone to `DNS_IP`. Pods continue using kube-dns for `*.svc.cluster.local` and their normal external forwarding. The LAN resolver does not expose Kubernetes Service discovery. If you already maintain a `kube-system/coredns-custom` ConfigMap outside this repository, merge its existing custom keys into this repository's manifest before reconciliation. Do not replace k3s's main `coredns` ConfigMap or disable its bundled CoreDNS: k3s owns the dynamic `NodeHosts` data.
 
-CoreDNS reloads the Corefile and zone files automatically after ConfigMap projection reaches the pods. The pinned `file` plugin uses `reload_by_mtime`, so editing addresses needs no manual SOA serial increment or pod restart. Allow a few minutes for Flux, volume projection and cached answers; the internal cache is capped at 30 seconds. An invalid configuration is logged and does not become a valid DNS change. Check `kubectl -n dns-system logs deployment/lan-dns` and query the actual answer after editing.
+CoreDNS reloads the Corefile, zone files, optional forwarding imports and node records automatically after ConfigMap projection reaches the pods. The pinned `file` plugin uses `reload_by_mtime`, so editing addresses needs no manual SOA serial increment or pod restart. Allow a few minutes for reconciliation, volume projection and cached answers; the internal cache is capped at 30 seconds. An invalid configuration is logged and does not become a valid DNS change. Check `kubectl -n kube-system logs deployment/lan-dns` and query the actual answer after editing.
 
 Two small replicas prefer different workload-capable nodes and a PDB retains one during voluntary maintenance. Both may run on a single eligible node, which provides no node-failure redundancy. Cilium announces the stable IP from one node at a time and can move it after a node failure. Test that failover on your LAN; CI does not test your switches, ARP or firewall.
 

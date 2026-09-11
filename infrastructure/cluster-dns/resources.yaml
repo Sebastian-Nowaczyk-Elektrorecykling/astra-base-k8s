@@ -6,7 +6,7 @@ metadata:
 data:
   # Supported k3s import; do not replace k3s's managed coredns ConfigMap.
   internal.server: |
-    internal:53 {
+    ${INTERNAL_DOMAIN}:53 {
         errors
         cache 30
         forward . ${DNS_IP}

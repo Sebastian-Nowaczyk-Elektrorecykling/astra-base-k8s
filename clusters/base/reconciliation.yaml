@@ -159,7 +159,7 @@ spec:
   interval: 10m
   retryInterval: 1m
   timeout: 20m
-  path: ./clusters/laptops/secrets
+  path: ./clusters/CLUSTER/secrets
   prune: true
   wait: true
   sourceRef:

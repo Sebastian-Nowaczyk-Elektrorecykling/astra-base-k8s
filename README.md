@@ -1,12 +1,12 @@
 # Elektro base Kubernetes
 
-A small, GitOps-managed cluster for Debian machines. Start with `k8s1` as a controller/worker hybrid and `k8s2` / `k8s3` as workers. Hostnames carry no hardware assumptions. All installed services are existing upstream projects; there is no custom controller, authentication server, operator framework, or application runtime in this repository.
+A reusable GitOps base for Debian clusters. The `laptops` profile starts with `k8s1` as a controller/worker hybrid and `k8s2` / `k8s3` as workers; these are examples, not a fixed node list. Any number of nodes can join with their own names. All installed services are existing upstream projects; there is no custom controller, authentication server, operator framework, or application runtime in this repository.
 
 | Layer | Choice | Behavior |
 | --- | --- | --- |
 | Kubernetes | k3s, embedded etcd | One server initially; add two servers for quorum HA |
 | Network | Cilium | CNI, kube-proxy replacement, policies, WireGuard, LAN load-balancer IP allocation and L2 announcements, Hubble relay |
-| LAN DNS | CoreDNS | Internal zones and configurable upstream forwarding on a stable Cilium IP |
+| LAN DNS | CoreDNS | Dynamic k3s node records, application wildcards and configurable upstream forwarding on a stable Cilium IP |
 | GitOps | Flux | Helm's normal lifecycle, explicit dependency stages, SOPS-encrypted secrets |
 | Volumes | Longhorn V1 engine | Ordinary `/var/lib/longhorn` directory; no raw partition |
 | Databases | CloudNativePG | PostgreSQL for Keycloak and OpenFGA; reusable cluster example |
@@ -23,6 +23,8 @@ Envoy Gateway supplies a supported OIDC/external-auth policy API. Cilium remains
 
 Follow [the bootstrap runbook](docs/bootstrap.md). It covers DNS/IP choices, host preparation, joining nodes, the one-time Cilium install, encrypted secrets, Flux bootstrap and first login. Review [the access model](docs/identity-access.md) before granting the first dashboard permission.
 
+Read [cluster settings and reuse](docs/clusters.md) for a field-by-field IP explanation, DHCP workers and creating another cluster. Profiles share `infrastructure/` and `clusters/base/`, while keeping independent settings, secrets and Flux entry points. Generate a second profile with `bash scripts/create-cluster.sh production`.
+
 On a fresh Debian administrator workstation, run `sudo bash scripts/prepare-workstation.sh` to install the required command-line tools. The setup is named **Elektro**; its existing GitHub repository remains `astra-base-k8s`.
 
 If an earlier bootstrap failed with `no Kubernetes objects found`, follow [the recovery and node-label update](docs/rename-elektro.md) before retrying.
@@ -32,14 +34,15 @@ If Cilium is contacting an old API address, follow [API-address recovery](docs/c
 ```sh
 # On each freshly installed Debian host, from this repository:
 sudo bash scripts/prepare-debian.sh --disable-sleep
-# Reboot. Copy bootstrap/cluster.env.example to local/cluster.env and edit it.
+# Reboot. Export the edited profile's env on the workstation and copy it here:
+# bash scripts/configure-cluster.sh --export laptops > local/cluster.env
 
 # On k8s1:
 sudo bash scripts/install-k3s.sh --role hybrid --name k8s1 --ip 192.168.50.11 \
   --config local/cluster.env --init
 ```
 
-Continue with the runbook; this command alone does not install the platform. Supply secrets and LAN address reservations before deployment. Internal DNS uses the fixed `.internal` scheme described below; keep your actual API and load-balancer addresses in the settings file.
+Continue with the runbook; this command alone does not install the platform. Supply secrets and reserve a small LAN pool for service IPs before deployment. Keep the controller/API address stable; workers can use DHCP with `--ip auto` (the default). The existing cluster retains `.internal`; another profile can use a suffix such as `production.internal`.
 
 ## DNS and exposure
 
@@ -51,7 +54,7 @@ Continue with the runbook; this command alone does not install the platform. Sup
 | Administration | `keycloak.admin.internal`, `longhorn.admin.internal` | Private gateway `EDGE_IP` |
 | Applications / production | `foo.internal`, `bar.internal` | Private gateway `EDGE_IP` |
 
-Point clients at the CoreDNS service's `DNS_IP`, directly or through DHCP. Configure `DNS_IP`, `DNS_CLIENT_CIDR`, `DNS_UPSTREAMS` and the machine addresses in `clusters/laptops/settings.yaml`; see [LAN DNS setup](docs/dns.md). Unknown machine names return NXDOMAIN. Wildcard DNS and certificates support new application names; each application still needs an exact route, callback and permission grant. The separate application-platform Flux repository owns deployment naming and lifecycle.
+Point clients at the CoreDNS service's **LAN** `DNS_IP`, directly or through DHCP. Configure `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS` in `clusters/laptops/settings.yaml`; see [LAN DNS setup](docs/dns.md). Registered node addresses are discovered automatically from k3s; unknown machine names return NXDOMAIN. Wildcard DNS and certificates support new application names; each application still needs an exact route, callback and permission grant. The separate application-platform Flux repository owns deployment naming and lifecycle.
 
 Internet exposure is **off by default**. An optional separate public gateway has its own IP, certificate and exact routes. `fuzzy.elektrorecykling.pl` can target the same Service as `foo.internal`; `bar.internal` remains private. Forwarding the private gateway to the Internet would defeat this boundary. See [DNS and migration](docs/domains.md) and [explicit public exposure](examples/public-exposure/README.md).
 
@@ -76,6 +79,8 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 ## Operations and extension
 
 - [Bootstrap](docs/bootstrap.md)
+- [Cluster settings, DHCP and multiple clusters](docs/clusters.md)
+- [LAN DNS](docs/dns.md)
 - [Identity, dynamic projects, agents and OpenFGA](docs/identity-access.md)
 - [HA and node roles](docs/high-availability.md)
 - [Change roles, remove nodes and rejoin](docs/node-role-changes.md)

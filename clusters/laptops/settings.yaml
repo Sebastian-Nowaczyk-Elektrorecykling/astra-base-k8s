@@ -1,26 +1,21 @@
+# Cluster-specific overrides; shared software defaults live in clusters/base/defaults.yaml.
+# LAN addresses below must match your network; no node IP inventory is needed.
 apiVersion: v1
 data:
   API_HOST: 192.168.2.153
   EDGE_IP: 192.168.50.240
-  # Reserve a separate unused IP in LB_START..LB_STOP, outside DHCP.
   DNS_IP: 192.168.50.242
   DNS_CLIENT_CIDR: 192.168.50.0/24
-  # Space-separated resolver IPs (optionally IP:port), in preference order.
-  # Never forward back to DNS_IP, kube-dns, or a router that forwards here.
-  DNS_UPSTREAMS: '1.1.1.1 9.9.9.9'
-  # Exact machine records, independent of API_HOST (which can become a VIP).
-  K8S1_IP: 192.168.2.153
-  K8S2_IP: 192.168.50.12
-  K8S3_IP: 192.168.50.13
-  FGA_MODEL_ID: NOT_CONFIGURED
-  FGA_STORE_ID: NOT_CONFIGURED
+  DNS_UPSTREAMS: 1.1.1.1 9.9.9.9
   LAN_INTERFACE_REGEX: ^en.*
   LB_START: 192.168.50.240
   LB_STOP: 192.168.50.249
-  PG_IMAGE: ghcr.io/cloudnative-pg/postgresql:17.11-standard-trixie
   POD_CIDR: 10.42.0.0/16
   IDENTITY_HOST: keycloak.admin.internal
-  PUBLIC_EDGE_IP: NOT_CONFIGURED
+  CLUSTER_NAME: laptops
+  INTERNAL_DOMAIN: internal
+  SERVICE_CIDR: 10.43.0.0/16
+  CLUSTER_DNS: 10.43.0.10
 kind: ConfigMap
 metadata:
   name: cluster-settings

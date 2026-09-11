@@ -1,6 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: dns-system
+namespace: kube-system
 resources:
 - resources.yaml
 - network.yaml
@@ -9,7 +9,7 @@ configMapGenerator:
   files:
   - Corefile
   - internal.db
-  - hosts.db
+  - empty.db
 generatorOptions:
   # CoreDNS reloads both configuration and zone files without restarting pods.
   disableNameSuffixHash: true

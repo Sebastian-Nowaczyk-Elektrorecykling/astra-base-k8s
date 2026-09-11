@@ -6,11 +6,15 @@ source "$repo/bootstrap/versions.env"
 [[ $# == 1 && -f $1 ]] || { echo 'Usage: bootstrap-cilium.sh local/cluster.env' >&2; exit 2; }
 # shellcheck source=/dev/null
 source "$1"
+# shellcheck source=lib/cluster-settings.sh
+source "$repo/scripts/lib/cluster-settings.sh"
+select_cluster
 : "${API_HOST:?}"
 command -v helm >/dev/null
 command -v kubectl >/dev/null
 # Persist the address before the first Helm install so Flux adopts the same endpoint.
 bash "$repo/scripts/configure-cluster.sh" "$1"
+check_cluster_target
 # Once Flux owns the release, use reconciliation/recovery instead of racing its Helm controller.
 if [[ -n $(kubectl get crd helmreleases.helm.toolkit.fluxcd.io --ignore-not-found -o name) ]]; then
   if [[ -n $(kubectl -n kube-system get helmrelease cilium --ignore-not-found -o name) ]]; then

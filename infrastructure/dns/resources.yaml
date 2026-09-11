@@ -78,10 +78,26 @@ spec:
         - name: config
           mountPath: /etc/coredns
           readOnly: true
+        - name: node-hosts
+          mountPath: /etc/k3s-coredns
+          readOnly: true
+        - name: forwarding
+          mountPath: /etc/coredns/custom
+          readOnly: true
       volumes:
       - name: config
         configMap:
           name: lan-dns
+      - name: node-hosts
+        configMap:
+          name: coredns
+          items:
+          - key: NodeHosts
+            path: NodeHosts
+      - name: forwarding
+        configMap:
+          name: lan-dns-forwarding
+          optional: true
 ---
 apiVersion: v1
 kind: Service

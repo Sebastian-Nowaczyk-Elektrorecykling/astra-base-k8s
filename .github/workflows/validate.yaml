@@ -27,6 +27,8 @@ jobs:
         run: bash tests/workstation.sh
       - name: Verify bootstrap and GitOps address handoff
         run: bash tests/cluster-config.sh
+      - name: Verify independent clusters share the same infrastructure
+        run: bash tests/clusters.sh
       - name: Verify the removed-node reboot guard
         run: bash tests/node-rejoin-guard.sh
   manifests:

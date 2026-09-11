@@ -64,7 +64,7 @@ metadata:
   namespace: authorization
 spec:
   hosts:
-  - '*.internal'
+  - '*.${INTERNAL_DOMAIN}'
   authentication:
     keycloak:
       jwt:

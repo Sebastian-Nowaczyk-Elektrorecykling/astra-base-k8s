@@ -8,19 +8,26 @@ Reserve, for example:
 
 | Purpose | Example |
 | --- | --- |
-| k8s1 / k8s2 / k8s3 | `192.168.50.11` / `.12` / `.13` |
+| Initial controller k8s1 | Stable `192.168.50.11`; workers may use ordinary DHCP |
 | Initial Kubernetes API | `192.168.50.11:6443` |
 | Optional future API VIP | `192.168.50.10` (outside service pool) |
 | Cilium service pool | `192.168.50.240`–`.249`, outside DHCP |
 | Gateway IP | `192.168.50.240` |
 | LAN DNS IP | `192.168.50.242` (separate reservation in the service pool) |
 | Application DNS | `*.internal`, `*.admin.internal`, `*.test.internal`, `*.staging.internal` → private gateway IP |
-| Machine DNS | `k8s1.hosts.internal`, `k8s2.hosts.internal`, `k8s3.hosts.internal` → each machine's LAN IP |
+| Machine DNS | `NODE.hosts.internal` → each registered node's reported LAN IP, discovered automatically |
 | Pod / Service CIDRs | `10.42.0.0/16` / `10.43.0.0/16` |
 
-Change the LAN addresses in `clusters/laptops/settings.yaml`. Keep `IDENTITY_HOST: keycloak.admin.internal` and `PUBLIC_EDGE_IP: NOT_CONFIGURED` for the private setup. Configure the [LAN DNS service](dns.md), including `DNS_IP`, `DNS_CLIENT_CIDR`, `DNS_UPSTREAMS` and the three machine IPs in the tracked settings. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Keep working external DNS during bootstrap; after Flux starts CoreDNS, point client machines at `DNS_IP`. Keep cluster hosts' bootstrap DNS independent as explained in the DNS runbook. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. For routed networks use Cilium BGP instead, as a reviewed replacement of the L2 policy.
+Change the LAN addresses in `clusters/laptops/settings.yaml`; [the settings reference](clusters.md#what-to-put-in-settingsyaml) explains every field. These examples must match your actual subnet. Keep `INTERNAL_DOMAIN: internal`, `IDENTITY_HOST: keycloak.admin.internal` and the shared `PUBLIC_EDGE_IP: NOT_CONFIGURED` default for the private setup. Configure the [LAN DNS service](dns.md), including `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS`; no node inventory is needed. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Keep working external DNS during bootstrap; after Flux starts CoreDNS, point client machines at `DNS_IP`. Keep cluster hosts' bootstrap DNS independent as explained in the DNS runbook. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. For routed networks use Cilium BGP instead, as a reviewed replacement of the L2 policy.
 
-Copy `bootstrap/cluster.env.example` to `local/cluster.env` on each host and the administrator workstation. Set the reachable API address there. `bootstrap-cilium.sh` copies `API_HOST` and `POD_CIDR` into `clusters/laptops/settings.yaml` before installing Cilium. All servers must receive identical critical k3s options. CIDRs must not overlap LAN/VPN networks. Do not change them on a running cluster.
+After installing workstation tools, edit the tracked settings and export the shared bootstrap values:
+
+```sh
+mkdir -p local
+bash scripts/configure-cluster.sh --export laptops > local/cluster.env
+```
+
+Copy this env file to each node. All servers must receive identical critical k3s options. CIDRs must not overlap LAN/VPN networks. Do not change them on a running cluster. For a second cluster, [create its own profile](clusters.md#create-a-second-profile) and use its name in the export command; do not copy another cluster's secrets or generated Flux sync.
 
 Prepare the administrator workstation from a checkout of this repository:
 
@@ -31,7 +38,7 @@ hash -r
 
 On a fresh Debian machine without Git, first run `sudo apt-get update` and `sudo apt-get install -y git ca-certificates`, then clone this repository. If Debian has no sudo configured, perform the package installation and workstation script as root with `su -`; run the remaining bootstrap commands as your regular user.
 
-The installer supports Debian 12/13 on amd64 and arm64. It installs Git, the SSH client, curl, jq, OpenSSL, age and `dig` from Debian, then checksum-verifies and installs kubectl, Helm, Flux and SOPS from their official release archives into `/usr/local/bin`. Their versions are pinned in `bootstrap/versions.env`; kubectl matches k3s's Kubernetes version. Re-running the script installs those same pins, including replacing an existing copy in `/usr/local/bin`. Keep that directory in PATH before older copies of these commands.
+The installer supports Debian 12/13 on amd64 and arm64. It installs Git, the SSH client, curl, jq, Python 3 (for configuration validation), OpenSSL, age and `dig` from Debian, then checksum-verifies and installs kubectl, Helm, Flux and SOPS from their official release archives into `/usr/local/bin`. Their versions are pinned in `bootstrap/versions.env`; kubectl matches k3s's Kubernetes version. Re-running the script installs those same pins, including replacing an existing copy in `/usr/local/bin`. Keep that directory in PATH before older copies of these commands.
 
 The script prepares administration tools only. Cluster-node preparation remains `scripts/prepare-debian.sh`; workstation installation does not configure kubeconfig, generate credentials, change swap, install a container runtime or join a cluster.
 
@@ -45,8 +52,7 @@ On each machine:
 git clone https://github.com/Sebastian-Nowaczyk-Elektrorecykling/astra-base-k8s.git
 cd astra-base-k8s
 mkdir -p local
-cp bootstrap/cluster.env.example local/cluster.env
-# Edit local/cluster.env.
+# Copy the exported cluster.env from the workstation into local/cluster.env.
 sudo bash scripts/prepare-debian.sh --disable-sleep
 sudo reboot
 ```
@@ -63,13 +69,13 @@ Use `--role controller` for a dedicated controller. It still runs a kubelet and 
 Transfer `/var/lib/rancher/k3s/server/token` from k8s1 to a root-readable file on joining nodes over your existing SSH/admin channel. Do not paste it into shell arguments, Git or issues. It is a privileged server-join credential. You can instead configure an agent-only token for workers; that token cannot add controllers.
 
 ```sh
-# On k8s2 (same pattern for k8s3 with .13):
-sudo bash scripts/install-k3s.sh --role worker --name k8s2 --ip 192.168.50.12 \
+# On k8s2 (repeat with any unique name for additional workers):
+sudo bash scripts/install-k3s.sh --role worker --name k8s2 --ip auto \
   --config local/cluster.env --server https://192.168.50.11:6443 \
   --token-file /root/k3s-join-token
 ```
 
-The nodes are expected to be NotReady until Cilium is installed. The installer refuses to overwrite an existing installation. It is for fresh nodes or cleaned, rebooted nodes rejoining after [the removal procedure](node-role-changes.md), not for overwriting a live installation.
+The nodes are expected to be NotReady until Cilium is installed. `--ip auto` omits `node-ip` and lets k3s choose the address at startup; it is also the default if `--ip` is omitted. See [DHCP limits](clusters.md#dhcp-and-dynamic-node-dns) before changing a running node's address. The installer refuses to overwrite an existing installation. It is for fresh nodes or cleaned, rebooted nodes rejoining after [the removal procedure](node-role-changes.md), not for overwriting a live installation.
 
 ## 3. Bootstrap Cilium
 
@@ -83,7 +89,7 @@ kubectl get nodes -o wide
 
 The normal Helm release is installed once to solve the CNI/bootstrap dependency. Flux later reconciles that same release, namespace, version and shared values file. There is no k3s HelmChart resource racing Flux. Do not re-enable Flannel, kube-proxy, Traefik, ServiceLB or local-path storage.
 
-Review the settings file updated by this step and include it in the commit below. Flux cannot read your ignored `local/cluster.env`: it uses `API_HOST` from the tracked settings ConfigMap. For later address changes, run `bash scripts/configure-cluster.sh local/cluster.env`, then commit and push the resulting settings change. The helper only copies the shared API address and pod CIDR; configure load-balancer addresses and other platform values in `settings.yaml`.
+Review the settings file and include it in the commit below. Flux cannot read your ignored `local/cluster.env`: it uses the merged tracked settings ConfigMap. Prefer editing the profile and re-exporting its env. For an existing env file, `bash scripts/configure-cluster.sh local/cluster.env` imports its API, Pod/Service networks, kube-dns IP and private suffix into the selected profile; review, commit and push that change. Load-balancer/DNS values remain in `settings.yaml` unless explicitly included in that trusted env file. Old files without `CLUSTER_NAME` select `laptops` for compatibility.
 
 If Flux already manages Cilium, the bootstrap script stops before running Helm against that managed release. Use [Cilium API-address recovery](cilium-api-recovery.md) if pods are already connecting to the wrong server.
 
@@ -108,7 +114,7 @@ git pull --ff-only
 
 The GitHub token bootstraps Flux's read-only SSH deploy key; the token is not stored in the cluster. Back up the age private key offline. `sops-age` must be restored before Flux can recover encrypted resources. The cluster's `.sops.yaml` can be added with your public recipient if you want convenient `sops` edits. Never commit decrypted copies.
 
-Before making cluster changes, `bootstrap-flux.sh` verifies that `API_HOST` and `POD_CIDR` agree with `local/cluster.env` and that the committed cluster configuration matches `origin/main`. This prevents Flux from replacing the working Cilium API address with an old Git value. If your local config has a different path, pass it as the second argument: `bash scripts/bootstrap-flux.sh local/age.agekey /path/to/cluster.env`.
+Before making cluster changes, `bootstrap-flux.sh` verifies that bootstrap values agree with the selected profile, that kubeconfig points at its API, and that the profile and shared infrastructure match `origin/main`. This prevents Flux from replacing the working Cilium API address with an old Git value or bootstrapping the wrong selected cluster. If your local config has a different path, pass it as the second argument: `bash scripts/bootstrap-flux.sh local/age.agekey /path/to/cluster.env`.
 
 The checked-in `flux-system/kustomization.yaml` references both `gotk-components.yaml` and `gotk-sync.yaml`. The latter starts as a comment-only placeholder, then Flux writes the real GitRepository and Kustomization during bootstrap. Flux preserves an existing Kustomization's resource list: leaving it empty causes `no Kubernetes objects found` even after the controllers' YAML has been generated. This layout follows [Flux's bootstrap customization procedure](https://fluxcd.io/flux/installation/configuration/bootstrap-customization/).
 

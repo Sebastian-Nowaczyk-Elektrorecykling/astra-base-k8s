@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: dns-system
+  # Retained empty after the DNS migration so Flux does not delete a namespace in use.
   labels:
     app.kubernetes.io/part-of: elektro-base
     pod-security.kubernetes.io/enforce: restricted

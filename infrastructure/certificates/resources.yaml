@@ -39,10 +39,10 @@ metadata:
 spec:
   secretName: edge-tls
   dnsNames:
-  - '*.internal'
-  - '*.admin.internal'
-  - '*.test.internal'
-  - '*.staging.internal'
+  - '*.${INTERNAL_DOMAIN}'
+  - '*.admin.${INTERNAL_DOMAIN}'
+  - '*.test.${INTERNAL_DOMAIN}'
+  - '*.staging.${INTERNAL_DOMAIN}'
   privateKey:
     algorithm: ECDSA
     size: 256

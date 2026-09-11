@@ -1,0 +1,3 @@
+; Negative-answer fallback after the private query has been rewritten to a node name.
+. 30 IN SOA dns.admin.${INTERNAL_DOMAIN}. hostmaster.${INTERNAL_DOMAIN}. (1 3600 600 86400 30)
+. 30 IN NS dns.admin.${INTERNAL_DOMAIN}.

@@ -1,0 +1,21 @@
+# Example network values: choose real addresses before bootstrap.
+apiVersion: v1
+data:
+  API_HOST: 192.168.60.11
+  EDGE_IP: 192.168.60.240
+  DNS_IP: 192.168.60.242
+  DNS_CLIENT_CIDR: 192.168.60.0/24
+  DNS_UPSTREAMS: 1.1.1.1 9.9.9.9
+  LAN_INTERFACE_REGEX: ^(en.*|eth.*)$
+  LB_START: 192.168.60.240
+  LB_STOP: 192.168.60.249
+  POD_CIDR: 10.52.0.0/16
+  IDENTITY_HOST: keycloak.admin.example.internal
+  CLUSTER_NAME: example
+  INTERNAL_DOMAIN: example.internal
+  SERVICE_CIDR: 10.53.0.0/16
+  CLUSTER_DNS: 10.53.0.10
+kind: ConfigMap
+metadata:
+  name: cluster-settings
+  namespace: flux-system

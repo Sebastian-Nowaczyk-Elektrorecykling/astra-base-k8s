@@ -42,6 +42,19 @@ def run(*args):
     return subprocess.check_output(args, cwd=ROOT, text=True)
 
 
+def profile_settings(cluster="laptops"):
+    defaults = read(ROOT / "clusters/base/defaults.yaml")[0]["data"]
+    overrides = read(ROOT / "clusters" / cluster / "settings.yaml")[0]["data"]
+    return {**defaults, **overrides}
+
+
+def configured(path, settings):
+    text = pathlib.Path(path).read_text()
+    for key, value in settings.items():
+        text = text.replace("${" + key + "}", value)
+    return [d for d in yaml.load_all(text, Loader=UniqueLoader) if d is not None]
+
+
 def static():
     files = [p for folder in ("infrastructure", "clusters", "examples", "bootstrap")
              for p in (ROOT / folder).rglob("*.yaml")]
@@ -55,7 +68,7 @@ def static():
     assert {"gotk-components.yaml", "gotk-sync.yaml"}.issubset(
         read(flux_base / "kustomization.yaml")[0]["resources"]), "Flux bootstrap must include controllers and sync resources"
     assert any(d.get("kind") == "Deployment" for d in read(flux_base / "gotk-components.yaml"))
-    phases = read(ROOT / "clusters/laptops/reconciliation.yaml")
+    phases = read(ROOT / "clusters/base/reconciliation.yaml")
     by_name = {p["metadata"]["name"]: p for p in phases}
     def visit(name, trail):
         assert name not in trail, f"Dependency cycle: {trail + [name]}"
@@ -68,8 +81,9 @@ def static():
     assert {c["metadata"]["name"]: c["parameters"]["numberOfReplicas"] for c in classes} == {
         "longhorn": "1", "longhorn-3": "3", "longhorn-cnpg": "1"}
     assert all(c["reclaimPolicy"] == "Retain" and c["parameters"]["dataEngine"] == "v1" for c in classes)
-    sp = read(ROOT / "infrastructure/access/resources.yaml")[0]["spec"]
-    realm_config = read(ROOT / "infrastructure/identity/resources.yaml")[0]["data"]
+    settings = profile_settings()
+    sp = configured(ROOT / "infrastructure/access/resources.yaml", settings)[0]["spec"]
+    realm_config = configured(ROOT / "infrastructure/identity/resources.yaml", settings)[0]["data"]
     realm = json.loads(realm_config["elektro-realm.json"])
     assert realm["realm"] == "elektro"
     client = next(c for c in realm["clients"] if c["clientId"] == sp["oidc"]["clientID"])
@@ -79,7 +93,7 @@ def static():
                for p in sp["jwt"]["providers"])
     assert sp["extAuth"]["failOpen"] is False and sp["oidc"] and sp["jwt"]
     assert "cookieDomain" not in sp["oidc"]
-    settings = read(ROOT / "clusters/laptops/settings.yaml")[0]["data"]
+    settings = profile_settings()
     assert "BASE_DOMAIN" not in settings
     dns_ip = ipaddress.IPv4Address(settings['DNS_IP'])
     assert ipaddress.IPv4Address(settings['LB_START']) <= dns_ip <= ipaddress.IPv4Address(settings['LB_STOP'])
@@ -93,21 +107,29 @@ def static():
         assert not (address.is_loopback or address.is_unspecified or address.is_multicast)
         assert address != dns_ip, 'DNS cannot forward to itself'
         assert len(parts) == 1 or (len(parts) == 2 and 0 < int(parts[1]) < 65536)
-    for number in (1, 2, 3):
-        assert ipaddress.IPv4Address(settings[f'K8S{number}_IP']) != dns_ip
-    assert '*' not in (ROOT / 'infrastructure/dns/hosts.db').read_text()
+    assert not any(key.startswith('K8S') for key in settings), 'Node inventory must be dynamic'
+    for directory in (ROOT / 'clusters').iterdir():
+        if not (directory / 'settings.yaml').exists():
+            continue
+        data = profile_settings(directory.name)
+        assert data['CLUSTER_NAME'] == directory.name
+        subprocess.run(['python3', str(ROOT / 'scripts/validate-cluster.py')],
+                       input=json.dumps({'data': data}), text=True, check=True)
     assert by_name['dns']['spec']['dependsOn'] == [{'name': 'network'}]
     assert by_name['cluster-dns']['spec']['dependsOn'] == [{'name': 'dns'}]
     dns_pod = read(ROOT / 'infrastructure/dns/resources.yaml')[0]['spec']['template']['spec']
     assert dns_pod['automountServiceAccountToken'] is False
     assert dns_pod['dnsPolicy'] == 'Default'
+    mount = next(v for v in dns_pod['volumes'] if v['name'] == 'node-hosts')
+    assert mount['configMap'] == {'name': 'coredns', 'items': [{'key': 'NodeHosts', 'path': 'NodeHosts'}]}
+    assert read(ROOT / 'infrastructure/dns/kustomization.yaml')[0]['namespace'] == 'kube-system'
     assert dns_pod['containers'][0]['image'] == 'coredns/coredns:1.14.7'
-    private_gateway = read(ROOT / "infrastructure/edge/resources.yaml")[-1]
+    private_gateway = configured(ROOT / "infrastructure/edge/resources.yaml", settings)[-1]
     listener_hosts = {l["name"]: l["hostname"] for l in private_gateway["spec"]["listeners"]}
     assert listener_hosts == {"identity": "keycloak.admin.internal", "admin": "*.admin.internal",
                               "test": "*.test.internal", "staging": "*.staging.internal", "apps": "*.internal"}
     assert {t["sectionName"] for t in sp["targetRefs"]} == {"admin", "test", "staging", "apps"}
-    assert set(read(ROOT / "infrastructure/certificates/resources.yaml")[-1]["spec"]["dnsNames"]) == {
+    assert set(configured(ROOT / "infrastructure/certificates/resources.yaml", settings)[-1]["spec"]["dnsNames"]) == {
         "*.internal", "*.admin.internal", "*.test.internal", "*.staging.internal"}
     assert client["redirectUris"] == ["https://longhorn.admin.internal/oauth2/callback"]
     assert not any("public-exposure" in p["spec"]["path"] for p in phases), "Public exposure must remain opt-in"
@@ -127,7 +149,7 @@ def static():
 
 
 def render():
-    settings = read(ROOT / "clusters/laptops/settings.yaml")[0]["data"]
+    settings = profile_settings()
     # Optional examples also get explicit sample values during validation.
     settings.update(API_VIP="192.168.50.10", API_VIP_INTERFACE="eth0")
     manifests = []

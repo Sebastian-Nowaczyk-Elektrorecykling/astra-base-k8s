@@ -32,7 +32,7 @@ source "$repo/bootstrap/versions.env"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends ca-certificates curl git openssh-client \
-  jq openssl age dnsutils tar gzip coreutils
+  jq openssl age dnsutils python3 tar gzip coreutils
 
 umask 077
 tmp=$(mktemp -d /tmp/elektro-workstation.XXXXXX)

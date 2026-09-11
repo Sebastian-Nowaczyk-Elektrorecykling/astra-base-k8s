@@ -2,7 +2,7 @@
 
 `local/cluster.env` supplies the initial Helm install. After bootstrap, Flux reads `API_HOST` from `clusters/laptops/settings.yaml`, substitutes it into `infrastructure/cilium/release.yaml`, and reconciles the Helm release. Flux cannot read an ignored file on your workstation. Previously, a correct local address could therefore be replaced with the example address `192.168.50.11` from Git.
 
-The bootstrap script now copies `API_HOST` and `POD_CIDR` into the tracked ConfigMap. Flux bootstrap checks that those values match the local file and that the cluster configuration has been pushed to `origin/main`. For an existing cluster, use the steps below. Keep the pod CIDR at its existing value; this procedure changes the API endpoint, not the cluster's network ranges.
+The bootstrap script synchronizes the shared bootstrap values into the selected profile. Flux bootstrap checks that those values match the local file and that the cluster configuration has been pushed to `origin/main`. `CLUSTER_NAME` selects the profile; old env files default to `laptops`. For an existing cluster, use the steps below with its kubeconfig and profile path. Keep the Pod/Service CIDRs and kube-dns IP at their installed values; this procedure changes the API endpoint, not the cluster's network ranges.
 
 ## Commit the correct desired address
 
@@ -58,10 +58,11 @@ kubectl get --raw=/readyz
 flux suspend kustomization flux-system
 flux suspend kustomization cilium
 flux suspend helmrelease cilium -n kube-system
-kubectl apply -f clusters/laptops/settings.yaml
 
 # Source only your own trusted configuration file.
 source local/cluster.env
+settings_patch=$(jq -n --arg host "$API_HOST" '{data: {API_HOST: $host}}')
+kubectl -n flux-system patch configmap cluster-settings --type=merge --patch "$settings_patch"
 patch=$(jq -n --arg host "$API_HOST" '{spec: {values: {k8sServiceHost: $host}}}')
 kubectl -n kube-system patch helmrelease cilium --type=merge --patch "$patch"
 ```

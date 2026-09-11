@@ -1,20 +1,34 @@
-hosts.internal:1053 {
+hosts.${INTERNAL_DOMAIN}:1053 {
     errors
-    file /etc/coredns/hosts.db hosts.internal {
+    rewrite stop {
+        name regex ^(.+)[.]hosts[.]${INTERNAL_DOMAIN}[.]$ {1}.
+        answer auto
+        answer name ^[.]$ hosts.${INTERNAL_DOMAIN}.
+    }
+    # k3s updates this ConfigMap key from Node.status.addresses.
+    hosts /etc/k3s-coredns/NodeHosts . {
+        import /etc/coredns/custom/*.hosts
+        ttl 30
+        reload 15s
+        no_reverse
+        fallthrough
+    }
+    # Unknown names get a local negative answer; never fall through to upstream DNS.
+    file /etc/coredns/empty.db .
+    cache 30
+}
+
+${INTERNAL_DOMAIN}:1053 {
+    errors
+    file /etc/coredns/internal.db ${INTERNAL_DOMAIN} {
         reload 15s
         reload_by_mtime
     }
     cache 30
 }
 
-internal:1053 {
-    errors
-    file /etc/coredns/internal.db internal {
-        reload 15s
-        reload_by_mtime
-    }
-    cache 30
-}
+# Per-cluster conditional forwarding, for example to another cluster's private zone.
+import /etc/coredns/custom/*.server
 
 # Kubernetes service discovery remains on kube-dns, never on the LAN resolver.
 cluster.local:1053 {

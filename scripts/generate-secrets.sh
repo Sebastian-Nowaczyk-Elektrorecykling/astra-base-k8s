@@ -2,9 +2,12 @@
 # Run once on the administrator workstation. Only encrypted output is committed.
 set -euo pipefail
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-[[ $# == 1 && $1 == age1* ]] || { echo 'Usage: generate-secrets.sh AGE_PUBLIC_RECIPIENT' >&2; exit 2; }
+[[ ( $# == 1 || $# == 2 ) && $1 == age1* ]] || { echo 'Usage: generate-secrets.sh AGE_PUBLIC_RECIPIENT [CLUSTER_NAME]' >&2; exit 2; }
 for cmd in kubectl sops openssl; do command -v "$cmd" >/dev/null; done
-target="$repo/clusters/laptops/secrets/bootstrap.sops.yaml"
+# shellcheck source=lib/cluster-settings.sh
+source "$repo/scripts/lib/cluster-settings.sh"
+select_cluster "${2:-}"
+target="$cluster_dir/secrets/bootstrap.sops.yaml"
 [[ ! -e $target ]] || { echo 'Secrets already exist; use sops to edit or rotate them.' >&2; exit 1; }
 umask 077
 install -d -m 0700 "$repo/local"
@@ -27,10 +30,10 @@ for f in oidc fga admin; do tr -d '\n' <"$tmp/$f" >"$tmp/$f.raw"; done
 # Authorino only watches Secrets carrying this label.
 sed -i '/^  name: openfga-key$/a\  labels:\n    authorino.kuadrant.io/managed-by: authorino' "$tmp/bundle.yaml"
 sops --encrypt --age "$1" --encrypted-regex '^(data|stringData)$' "$tmp/bundle.yaml" >"$target"
-cat >"$repo/clusters/laptops/secrets/kustomization.yaml" <<'EOF'
+cat >"$cluster_dir/secrets/kustomization.yaml" <<'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - bootstrap.sops.yaml
 EOF
-echo 'Encrypted bootstrap secrets created. Commit clusters/laptops/secrets before bootstrapping Flux.'
+echo "Encrypted bootstrap secrets created. Commit clusters/$cluster_name/secrets before bootstrapping Flux."

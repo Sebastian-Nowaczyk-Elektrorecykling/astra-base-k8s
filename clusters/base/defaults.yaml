@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-settings
+  namespace: flux-system
+data:
+  PG_IMAGE: ghcr.io/cloudnative-pg/postgresql:17.11-standard-trixie
+  FGA_MODEL_ID: NOT_CONFIGURED
+  FGA_STORE_ID: NOT_CONFIGURED
+  PUBLIC_EDGE_IP: NOT_CONFIGURED

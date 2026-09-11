@@ -8,7 +8,7 @@ source "$repo/bootstrap/versions.env"
 [[ $(helm version --template '{{.Version}}') == "$HELM_VERSION" ]]
 [[ $(flux version --client) == *"$FLUX_VERSION"* ]]
 [[ $(sops --version --disable-version-check) == *"${SOPS_VERSION#v}"* ]]
-for cmd in git ssh curl jq openssl age age-keygen dig; do command -v "$cmd" >/dev/null; done
+for cmd in git ssh curl jq openssl age age-keygen dig python3; do command -v "$cmd" >/dev/null; done
 
 umask 077
 tmp=$(mktemp -d /tmp/elektro-workstation-test.XXXXXX)

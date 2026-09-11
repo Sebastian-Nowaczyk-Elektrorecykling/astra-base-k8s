@@ -12,7 +12,7 @@ spec:
       operator: In
       values:
       - envoy-gateway-system
-      - dns-system
+      - kube-system
 ---
 apiVersion: cilium.io/v2alpha1
 kind: CiliumL2AnnouncementPolicy
@@ -25,7 +25,7 @@ spec:
       operator: In
       values:
       - envoy-gateway-system
-      - dns-system
+      - kube-system
   interfaces:
   - ${LAN_INTERFACE_REGEX}
   externalIPs: false

@@ -11,11 +11,13 @@
 | Existing identity administration | `keycloak.admin.internal` | `identity` (native authentication) | `EDGE_IP` |
 | Other / production applications | `foo.internal` | `apps` | `EDGE_IP` |
 
-The base deploys CoreDNS on a stable LAN `DNS_IP`. Configure the upstream resolvers and exact machine addresses in the tracked settings, then point clients or your router's conditional `.internal` forwarding at it. See [LAN DNS setup](dns.md). The four application wildcards resolve to `EDGE_IP`; the reserved `dns.admin.internal` record resolves to `DNS_IP`.
+The table shows the existing `laptops` profile with `INTERNAL_DOMAIN: internal`. A [second profile](clusters.md) can use `production.internal`, preserving the same hosts/test/staging/admin groups beneath that suffix. Private certificates and admission rules use the chosen suffix; public exposure remains a separate opt-in.
+
+The base deploys CoreDNS on a stable LAN `DNS_IP`. Configure the upstream resolvers in the tracked settings, then point clients or your router's conditional `.internal` forwarding at it. Node names and IPs come from k3s's automatically maintained `NodeHosts` data. See [LAN DNS setup](dns.md). The four application wildcards resolve to `EDGE_IP`; the reserved `dns.admin.internal` record resolves to `DNS_IP`.
 
 CoreDNS serves `hosts.internal` as a separate authoritative zone containing only exact machine records; unknown names return NXDOMAIN. Never point `*.hosts.internal` at the gateway. Configure workstation/client DNS, including over VPN, as described in the DNS runbook. Cluster hosts should retain independent bootstrap DNS; pods receive the supported k3s internal-zone import. Applications using encrypted/public DNS may need an internal-zone exception. `/etc/hosts` can bootstrap a few exact names but cannot implement wildcard DNS.
 
-The node names remain `k8s1`, `k8s2`, `k8s3`; these DNS aliases do not rename Kubernetes Nodes. Fresh server installs include `NODE.hosts.internal` in their API certificate SANs. Existing servers continue using their configured API address. Do not reinstall them merely to add a DNS alias; add a SAN using the normal k3s configuration and certificate-maintenance procedure before changing a kubeconfig to that alias. Worker DNS records do not make workers API servers. Kubernetes Service discovery remains `*.svc.cluster.local`.
+Node names may be any valid unique Kubernetes node names; `k8s1`, `k8s2`, `k8s3` are examples. These DNS aliases do not rename Kubernetes Nodes. Fresh server installs include `NODE.hosts.INTERNAL_DOMAIN` in their API certificate SANs. Existing servers continue using their configured API address. Do not reinstall them merely to add a DNS alias; add a SAN using the normal k3s configuration and certificate-maintenance procedure before changing a kubeconfig to that alias. Worker DNS records do not make workers API servers. Kubernetes Service discovery remains `*.svc.cluster.local`.
 
 ## Deployments in the separate application repository
 

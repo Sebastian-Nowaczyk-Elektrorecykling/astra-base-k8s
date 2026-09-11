@@ -5,6 +5,7 @@ import pathlib
 import subprocess
 import time
 import yaml
+from render import profile_settings
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -21,7 +22,7 @@ def check(obj, reason=None):
         assert result.returncode != 0 and reason in result.stderr, result.stdout + result.stderr
 
 assert subprocess.check_output(['kubectl', 'config', 'current-context'], text=True).strip() == 'kind-elektro-validation'
-settings = yaml.safe_load((ROOT / 'clusters/laptops/settings.yaml').read_text())['data']
+settings = profile_settings()
 
 def render(path, values=settings):
     text = (ROOT / path).read_text()
@@ -102,7 +103,7 @@ check(route(values['IDENTITY_HOST'], public=True), 'Public routes require the ex
 infra = route('fuzzy.elektrorecykling.pl', public=True)
 infra['spec']['rules'][0]['backendRefs'][0].update(namespace='identity', name='keycloak')
 check(infra, 'Public application routes must directly reference')
-infra['spec']['rules'][0]['backendRefs'][0].update(namespace='dns-system', name='lan-dns', port=53)
+infra['spec']['rules'][0]['backendRefs'][0].update(namespace='kube-system', name='lan-dns', port=53)
 check(infra, 'Public application routes must directly reference')
 identity = render('examples/public-exposure/routes/resources.yaml', values)[0]
 for path in ['/admin', '/realms/master', '/', '/metrics', '/realms/elektro-other']:
@@ -118,6 +119,25 @@ check(public_proxy, 'Only managed EnvoyProxy resources')
 public_gateway = render('examples/public-exposure/edge/resources.yaml', values)[2]
 public_gateway['spec']['listeners'][1]['hostname'] = '*.internal'
 check(public_gateway, 'The public Gateway has only')
+# A different private suffix uses the same routes, certificates and admission rules.
+alternate = dict(settings, INTERNAL_DOMAIN='factory.internal', IDENTITY_HOST='keycloak.admin.factory.internal')
+subprocess.run(['kubectl', 'apply', '--server-side', '--field-manager=elektro-validation', '-f', '-'],
+               input=yaml.safe_dump_all(render('infrastructure/admission/guards.yaml', alternate)),
+               text=True, check=True, stdout=subprocess.DEVNULL)
+for attempt in range(30):
+    if call([route('foo.factory.internal')]).returncode == 0:
+        break
+    time.sleep(1)
+else:
+    raise AssertionError('Second cluster domain was not accepted')
+for host, listener in [('foo.factory.internal', 'apps'), ('foo-42.test.factory.internal', 'test'),
+                       ('foo.staging.factory.internal', 'staging'), ('longhorn.admin.factory.internal', 'admin')]:
+    check(route(host, listener))
+for host in ['foo.internal', 'k8s9.hosts.factory.internal', 'hosts.factory.internal', 'deep.foo.factory.internal']:
+    check(route(host), 'Internal hostnames must match')
+for part in ['edge', 'certificates', 'access', 'routes']:
+    for obj in render(f'infrastructure/{part}/resources.yaml', alternate):
+        check(obj)
 # Restore base admission before subsequent startup smoke checks.
 subprocess.run(['kubectl', 'apply', '--server-side', '--field-manager=elektro-validation', '-f',
                 'rendered/infrastructure-admission.yaml'], check=True, stdout=subprocess.DEVNULL)

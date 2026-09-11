@@ -41,7 +41,7 @@ spec:
   gatewayClassName: platform
   listeners:
   - name: identity
-    hostname: keycloak.admin.internal
+    hostname: keycloak.admin.${INTERNAL_DOMAIN}
     port: 443
     protocol: HTTPS
     tls:
@@ -53,7 +53,7 @@ spec:
       namespaces:
         from: Same
   - name: admin
-    hostname: '*.admin.internal'
+    hostname: '*.admin.${INTERNAL_DOMAIN}'
     port: 443
     protocol: HTTPS
     tls:
@@ -65,7 +65,7 @@ spec:
       namespaces:
         from: Same
   - name: test
-    hostname: '*.test.internal'
+    hostname: '*.test.${INTERNAL_DOMAIN}'
     port: 443
     protocol: HTTPS
     tls:
@@ -77,7 +77,7 @@ spec:
       namespaces:
         from: Same
   - name: staging
-    hostname: '*.staging.internal'
+    hostname: '*.staging.${INTERNAL_DOMAIN}'
     port: 443
     protocol: HTTPS
     tls:
@@ -89,7 +89,7 @@ spec:
       namespaces:
         from: Same
   - name: apps
-    hostname: '*.internal'
+    hostname: '*.${INTERNAL_DOMAIN}'
     port: 443
     protocol: HTTPS
     tls:

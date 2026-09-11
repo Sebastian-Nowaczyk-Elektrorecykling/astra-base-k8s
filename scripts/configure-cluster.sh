@@ -1,44 +1,58 @@
 #!/usr/bin/env bash
-# Copy the shared, nonsecret bootstrap settings into the GitOps ConfigMap.
+# Bridge the selected GitOps profile and the nonsecret k3s bootstrap configuration.
 set -euo pipefail
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=lib/cluster-settings.sh
+source "$repo/scripts/lib/cluster-settings.sh"
+for cmd in kubectl jq python3; do command -v "$cmd" >/dev/null; done
+if [[ ${1:-} == --export && $# == 2 ]]; then
+  select_cluster "$2"
+  current=$(cluster_settings_json)
+  python3 "$repo/scripts/validate-cluster.py" <<<"$current"
+  echo '# Generated from the selected GitOps profile; contains no credentials.'
+  jq -r '.data | to_entries[] | select(.key | IN("CLUSTER_NAME","API_HOST","POD_CIDR","SERVICE_CIDR","CLUSTER_DNS","INTERNAL_DOMAIN")) | .key + "=" + (.value | @sh)' <<<"$current"
+  exit 0
+fi
 check=false
 if [[ ${1:-} == --check ]]; then check=true; shift; fi
 [[ $# == 1 && -f $1 ]] || {
-  echo 'Usage: configure-cluster.sh [--check] local/cluster.env' >&2; exit 2;
+  echo 'Usage: configure-cluster.sh [--check] local/cluster.env | --export CLUSTER_NAME' >&2; exit 2;
 }
-repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-settings="$repo/clusters/laptops/settings.yaml"
-for cmd in kubectl jq; do command -v "$cmd" >/dev/null; done
-# This is the same administrator-controlled shell config used to install k3s.
+# Administrator-controlled shell configuration, also consumed by install-k3s.sh.
 # shellcheck source=/dev/null
 source "$1"
-[[ ${API_HOST:-} =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || {
-  echo 'API_HOST must be a bare IPv4 address or DNS name, without https:// or :6443.' >&2; exit 2;
+select_cluster
+INTERNAL_DOMAIN=${INTERNAL_DOMAIN:-internal}
+current=$(cluster_settings_json)
+jq -e --arg cluster "$cluster_name" '.data.CLUSTER_NAME == $cluster' <<<"$current" >/dev/null || {
+  echo 'CLUSTER_NAME in settings.yaml does not match its directory.' >&2; exit 2;
 }
-[[ ${POD_CIDR:-} =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]] || {
-  echo 'POD_CIDR must be the existing IPv4 pod network, for example 10.42.0.0/16.' >&2; exit 2;
-}
-# --local does not contact Kubernetes; the workstation can run this before a cluster exists.
-current=$(kubectl patch --local --type=merge --patch '{}' --filename "$settings" -o json)
-jq -e '.kind == "ConfigMap" and .metadata.name == "cluster-settings" and .metadata.namespace == "flux-system"' \
-  <<<"$current" >/dev/null
-if jq -e --arg host "$API_HOST" --arg cidr "$POD_CIDR" \
-  '.data.API_HOST == $host and .data.POD_CIDR == $cidr' <<<"$current" >/dev/null; then
-  echo "Bootstrap and GitOps settings agree: API_HOST=$API_HOST, POD_CIDR=$POD_CIDR"
+patch=$(jq -n '{data:{}}')
+for key in API_HOST POD_CIDR SERVICE_CIDR CLUSTER_DNS INTERNAL_DOMAIN; do
+  [[ -n ${!key:-} ]] || { echo "Missing $key in bootstrap configuration." >&2; exit 2; }
+  patch=$(jq --arg key "$key" --arg value "${!key}" '.data[$key]=$value' <<<"$patch")
+done
+# Optional LAN settings can also be supplied by an existing administrator env file.
+for key in EDGE_IP DNS_IP DNS_CLIENT_CIDR DNS_UPSTREAMS LB_START LB_STOP LAN_INTERFACE_REGEX IDENTITY_HOST PUBLIC_EDGE_IP; do
+  if [[ -n ${!key:-} ]]; then
+    patch=$(jq --arg key "$key" --arg value "${!key}" '.data[$key]=$value' <<<"$patch")
+  fi
+done
+candidate=$(jq --argjson patch "$patch" '.data += $patch.data' <<<"$current")
+python3 "$repo/scripts/validate-cluster.py" <<<"$candidate"
+if [[ $(jq -S .data <<<"$candidate") == "$(jq -S .data <<<"$current")" ]]; then
+  echo "Bootstrap and GitOps settings agree for $cluster_name: API_HOST=$API_HOST, POD_CIDR=$POD_CIDR"
   exit 0
 fi
 if $check; then
-  echo 'Bootstrap and GitOps settings disagree; Flux would overwrite the local Cilium API address.' >&2
-  jq -r '"GitOps API_HOST=" + .data.API_HOST + ", POD_CIDR=" + .data.POD_CIDR' <<<"$current" >&2
-  echo "Local  API_HOST=$API_HOST, POD_CIDR=$POD_CIDR" >&2
-  echo 'Run bash scripts/configure-cluster.sh local/cluster.env, then commit and push settings.yaml.' >&2
+  echo "Bootstrap and GitOps settings disagree for $cluster_name; refusing to overwrite working cluster configuration." >&2
+  echo "Export a current env file from clusters/$cluster_name, or run configure-cluster.sh on the intended env file and commit the change." >&2
   exit 1
 fi
-patch=$(jq -n --arg host "$API_HOST" --arg cidr "$POD_CIDR" '{data: {API_HOST: $host, POD_CIDR: $cidr}}')
-tmp=$(mktemp "$repo/clusters/laptops/.settings.XXXXXX")
+settings="$cluster_dir/settings.yaml"
+tmp=$(mktemp "$cluster_dir/.settings.XXXXXX")
 trap 'rm -f -- "$tmp"' EXIT
-kubectl patch --local --type=merge --patch "$patch" --filename "$settings" -o yaml >"$tmp"
+kubectl patch --local --type=merge --patch "$patch" -f "$settings" -o yaml >"$tmp"
 chmod --reference="$settings" "$tmp"
 mv -- "$tmp" "$settings"
-echo "Updated GitOps settings: API_HOST=$API_HOST, POD_CIDR=$POD_CIDR"
-echo 'Review, commit and push clusters/laptops/settings.yaml before Flux takes over Cilium.'
+echo "Updated clusters/$cluster_name/settings.yaml. Review, commit and push before Flux takes over."

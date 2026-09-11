@@ -2,6 +2,7 @@ local/
 .tools/
 .cache/
 rendered/
+__pycache__/
 *.agekey
 *.key
 kubeconfig*
