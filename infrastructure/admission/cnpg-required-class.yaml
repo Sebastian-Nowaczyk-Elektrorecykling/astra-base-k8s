@@ -1,0 +1,37 @@
+# Validation runs after mutation and remains active without the Kyverno webhook.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: elektro-cnpg-storage
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - postgresql.cnpg.io
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - clusters
+  validations:
+  - expression: >-
+      has(object.spec.storage) && has(object.spec.storage.storageClass) &&
+      object.spec.storage.storageClass != null && object.spec.storage.storageClass != ''
+    message: CNPG storage must have an explicit class after defaulting; restore the Kyverno mutator or choose a class.
+  - expression: >-
+      !has(object.spec.walStorage) ||
+      (has(object.spec.walStorage.storageClass) && object.spec.walStorage.storageClass != null &&
+      object.spec.walStorage.storageClass != '')
+    message: CNPG WAL storage must have an explicit class after defaulting; restore the Kyverno mutator or choose a class.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: elektro-cnpg-storage
+spec:
+  policyName: elektro-cnpg-storage
+  validationActions:
+  - Deny

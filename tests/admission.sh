@@ -77,8 +77,17 @@ reject 'Init/debug containers cannot' kubectl apply --dry-run=server -f tests/fi
 # Verify the storage default cannot silently disappear when its webhook is unavailable.
 kubectl -n kyverno scale deployment/kyverno-admission-controller --replicas=0
 kubectl -n kyverno wait --for=delete pod -l app.kubernetes.io/component=admission-controller --timeout=2m
-reject 'failed calling webhook' kubectl apply --dry-run=server -f examples/cnpg-cluster.yaml
+for file in examples/cnpg-cluster.yaml .cache/explicit-cnpg.yaml; do
+  if kubectl apply --dry-run=server -f "$file" >.cache/defaulting-outage.log 2>&1; then
+    cat .cache/defaulting-outage.log >&2
+    echo 'CNPG without a data/WAL class was admitted while its mutator was unavailable.' >&2; exit 1
+  fi
+  # A disconnected Fail webhook rejects before validation; a gracefully removed
+  # webhook leaves the independent native class guard to reject the same request.
+  grep -Eq 'failed calling webhook|CNPG (WAL )?storage must have an explicit class after defaulting' .cache/defaulting-outage.log
+done
 kubectl -n kyverno scale deployment/kyverno-admission-controller --replicas=1
 kubectl -n kyverno rollout status deployment/kyverno-admission-controller --timeout=3m
+kubectl wait --for=jsonpath='{.status.conditionStatus.ready}'=true mutatingpolicy/cnpg-storage-default --timeout=2m
 python3 tests/domains.py
 echo 'Server-side schemas, CNPG default mutation and negative admission cases passed.'

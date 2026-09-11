@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
 - guards.yaml
 - cnpg-defaults.yaml
+- cnpg-required-class.yaml

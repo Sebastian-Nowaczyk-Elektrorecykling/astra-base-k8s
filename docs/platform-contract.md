@@ -228,7 +228,9 @@ metrics behind a public application alias.
 | `longhorn-cnpg` | 1 per PostgreSQL instance | Kyverno default for new CNPG data/WAL storage when the class is omitted |
 
 All three reclaim policies are `Retain`. CNPG defaulting occurs on the Cluster CR,
-not by guessing PVC labels. Explicit nonempty classes are preserved. Application
+not by guessing PVC labels. A native validation rule rejects missing data/WAL
+classes after mutation, including when the mutator is disabled. Explicit nonempty
+classes are preserved. Application
 databases belong in application namespaces, with separate credentials; never use
 the Keycloak/OpenFGA databases as shared application servers. Disable bundled
 PostgreSQL charts when adopting CNPG.
