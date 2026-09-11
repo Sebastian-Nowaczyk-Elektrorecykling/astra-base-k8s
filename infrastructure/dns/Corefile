@@ -3,8 +3,9 @@ hosts.${INTERNAL_DOMAIN}:1053 {
     rewrite stop name exact hosts.${INTERNAL_DOMAIN}. .
     rewrite stop {
         name regex ^(.+)[.]hosts[.]${INTERNAL_DOMAIN}[.]$ {1}.
-        answer name ^(.+)[.]$ {1}.hosts.${INTERNAL_DOMAIN}.
+        # CoreDNS applies response rules in reverse order.
         answer name ^[.]$ hosts.${INTERNAL_DOMAIN}.
+        answer name ^(.+)[.]$ {1}.hosts.${INTERNAL_DOMAIN}.
     }
     # k3s updates this ConfigMap key from Node.status.addresses.
     hosts /etc/k3s-coredns/NodeHosts . {
