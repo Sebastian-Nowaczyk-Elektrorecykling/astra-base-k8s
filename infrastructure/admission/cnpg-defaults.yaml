@@ -10,6 +10,8 @@ spec:
   evaluation:
     admission:
       enabled: true
+    background:
+      enabled: false
     mutateExisting:
       enabled: false
   matchConstraints:

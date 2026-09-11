@@ -74,6 +74,12 @@ spec:
   path: ./infrastructure/admission
   prune: true
   wait: true
+  healthCheckExprs:
+  - apiVersion: policies.kyverno.io/v1
+    kind: MutatingPolicy
+    current: >-
+      has(status) && has(status.conditionStatus) &&
+      has(status.conditionStatus.ready) && status.conditionStatus.ready
   sourceRef:
     kind: GitRepository
     name: flux-system

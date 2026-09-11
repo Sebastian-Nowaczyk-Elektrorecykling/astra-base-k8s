@@ -79,7 +79,7 @@ for that child. [Flux Kustomization behavior](https://fluxcd.io/flux/components/
 | Base readiness dependency | What it supplies |
 | --- | --- |
 | `controllers` | Longhorn, CNPG, cert-manager, Kyverno and Envoy Gateway controllers/CRDs |
-| `admission` | Exposure guards and CNPG storage mutation |
+| `admission` | Exposure guards and CNPG storage mutation, with an explicit check of Kyverno's nested readiness status |
 | `storage` | All three Longhorn StorageClasses, after admission/controllers |
 | `network` | Service pool, L2 announcements and default application ingress policy |
 | `cluster-dns` | Pod resolution of the profile's internal suffix, after LAN DNS |

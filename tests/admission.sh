@@ -9,7 +9,12 @@ helm upgrade --install kyverno .cache/charts/kyverno/kyverno --namespace kyverno
 kubectl apply --server-side --force-conflicts -f rendered/crds.yaml
 kubectl wait --for=condition=Established crd --all --timeout=3m
 kubectl apply --server-side --field-manager=elektro-validation -f rendered/infrastructure-admission.yaml
-kubectl wait --for=condition=Ready mutatingpolicy/cnpg-storage-default --timeout=2m
+if ! kubectl wait --for=jsonpath='{.status.conditionStatus.ready}'=true mutatingpolicy/cnpg-storage-default --timeout=2m; then
+  kubectl get mutatingpolicy cnpg-storage-default -o yaml >&2
+  kubectl -n kyverno logs deployment/kyverno-admission-controller --tail=100 >&2
+  exit 1
+fi
+kubectl apply --server-side --dry-run=server --validate=strict -f clusters/base/reconciliation.yaml >/dev/null
 # Allow the API server to observe bindings, polling a real denial rather than assuming immediate propagation.
 for attempt in {1..30}; do
   if ! kubectl create service nodeport bypass --tcp=80:80 -n default --dry-run=server -o yaml >/dev/null 2>&1; then break; fi
