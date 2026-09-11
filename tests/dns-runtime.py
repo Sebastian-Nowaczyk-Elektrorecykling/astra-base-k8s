@@ -34,13 +34,18 @@ def docker(*args):
 
 def wait_for(test, description, seconds=120):
     deadline = time.monotonic() + seconds
+    last_error = None
     while time.monotonic() < deadline:
         try:
             test()
             return
-        except (AssertionError, OSError, subprocess.CalledProcessError, dns.exception.DNSException):
+        except (AssertionError, OSError, subprocess.CalledProcessError, dns.exception.DNSException) as error:
+            last_error = error
             time.sleep(2)
-    raise AssertionError('Timed out waiting for ' + description)
+    details = str(last_error)
+    if isinstance(last_error, subprocess.CalledProcessError):
+        details += '\n' + (last_error.stdout or '') + (last_error.stderr or '')
+    raise AssertionError('Timed out waiting for ' + description + ': ' + details)
 
 
 name = 'elektro-dns-' + uuid.uuid4().hex[:10]
@@ -64,7 +69,9 @@ try:
         containers.append(k3s)
 
         def kube(*args, input=None):
-            return subprocess.check_output(['docker', 'exec', '-i', k3s, 'k3s', 'kubectl',
+            # The upstream scratch image's PATH need not contain /bin.
+            return subprocess.check_output(['docker', 'exec', '-i', k3s, '/bin/k3s', 'kubectl',
+                                            '--kubeconfig=/etc/rancher/k3s/k3s.yaml',
                                             '--request-timeout=10s', *args],
                                            input=input, text=True, stderr=subprocess.PIPE)
 
@@ -169,6 +176,9 @@ try:
 
         wait_for(lambda: check('worker-east.hosts.internal', nodes['worker-east']), 'CoreDNS startup')
         for protocol in ('udp', 'tcp'):
+            check('hosts.internal', protocol=protocol)
+            soa = query('hosts.internal', 'SOA', protocol)
+            assert soa.rcode() == dns.rcode.NOERROR and soa.answer[0].name.to_text() == 'hosts.internal.', soa.to_text()
             for node, ip in nodes.items():
                 check(node + '.hosts.internal', ip, protocol=protocol)
                 for qtype in ('AAAA', 'TXT', 'HTTPS'):
@@ -210,12 +220,19 @@ try:
         assert docker('inspect', '--format', '{{.RestartCount}}', server) == '0'
         assert docker('inspect', '--format', '{{.Config.User}}', server) == f'{uid}:{uid}'
         # A second cluster's suffix must work with the same manifests and arbitrary nodes.
+        custom = config / 'custom'
+        custom.mkdir(mode=0o755)
+        (custom / 'manual.hosts').write_text('192.0.2.99 printer\n')
+        (custom / 'neighbors.server').write_text(
+            'neighbors.factory.internal:1053 {\n    forward . ' + upstream + ':1053\n}\n')
         values.update(INTERNAL_DOMAIN='factory.internal')
         write_config(values)
         wait_for(lambda: check('arriving-205.hosts.factory.internal', nodes['arriving-205']), 'second cluster host suffix')
         check('longhorn.admin.factory.internal', values['EDGE_IP'])
         check('new-test-4.test.factory.internal', values['EDGE_IP'])
         check('missing.hosts.factory.internal', rcode=dns.rcode.NXDOMAIN)
+        check('printer.hosts.factory.internal', '192.0.2.99')
+        check('app.neighbors.factory.internal', '203.0.113.10')
         print('Wildcard/upstream reloads and a second cluster domain passed without a restart, running non-root.', flush=True)
 except BaseException:
     for container in containers:

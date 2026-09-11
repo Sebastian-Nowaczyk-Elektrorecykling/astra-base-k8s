@@ -1,5 +1,6 @@
 hosts.${INTERNAL_DOMAIN}:1053 {
     errors
+    rewrite stop name exact hosts.${INTERNAL_DOMAIN}. .
     rewrite stop {
         name regex ^(.+)[.]hosts[.]${INTERNAL_DOMAIN}[.]$ {1}.
         answer name ^(.+)[.]$ {1}.hosts.${INTERNAL_DOMAIN}.
