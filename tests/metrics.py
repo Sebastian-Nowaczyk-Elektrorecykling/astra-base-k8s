@@ -28,6 +28,11 @@ def check_rendered():
     assert prometheus['arbitraryFSAccessThroughSMs'] == {'deny': True}
     assert prometheus['externalLabels']['cluster'] == settings['CLUSTER_NAME']
     assert prometheus['retention'] == '7d' and prometheus['retentionSize'] == '15GB'
+    for key in ['MutatingWebhookConfiguration', 'ValidatingWebhookConfiguration']:
+        assert all(w['failurePolicy'] == 'Fail' for w in by_key[key, 'metrics-admission']['webhooks'])
+    release = read(ROOT / 'infrastructure/monitoring/release.yaml')[0]['spec']
+    for action in ['install', 'upgrade']:
+        assert release[action]['strategy']['name'] == 'RetryOnFailure'
     for o in objects:
         if o['kind'] == 'Service':
             assert o['spec'].get('type', 'ClusterIP') == 'ClusterIP'
@@ -89,8 +94,19 @@ def runtime():
     values['grafana']['persistence']['enabled'] = False
     values['grafana']['grafana.ini']['auth.proxy']['whitelist'] = '127.0.0.1/32'
     (ROOT / '.cache/metrics-runtime-values.yaml').write_text(yaml.safe_dump(values))
-    run('helm', 'upgrade', '--install', 'metrics', '.cache/charts/metrics/kube-prometheus-stack',
-        '-n', 'monitoring', '-f', '.cache/metrics-runtime-values.yaml', '--wait', '--timeout', '8m', '--take-ownership')
+    command = ['helm', 'upgrade', '--install', 'metrics', '.cache/charts/metrics/kube-prometheus-stack',
+               '-n', 'monitoring', '-f', '.cache/metrics-runtime-values.yaml',
+               '--wait', '--timeout', '8m', '--take-ownership']
+    first = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+    if first.returncode:
+        # Exercise Flux RetryOnFailure's documented install -> upgrade sequence.
+        # No uninstall, weakened failure policy or custom job is used in production.
+        assert 'failed calling webhook' in first.stderr, first.stdout + first.stderr
+        print('Initial webhook is starting; retry the same release after its dependencies are ready.')
+        run('kubectl', '-n', 'monitoring', 'wait', '--for=condition=Ready',
+            'certificate/metrics-admission', '--timeout=3m')
+        run('kubectl', '-n', 'monitoring', 'rollout', 'status', 'deployment/metrics-operator', '--timeout=3m')
+        run(*command)
     # Helm's CR creation does not imply that operator-managed StatefulSets are ready.
     for name in ['prometheus-metrics-prometheus', 'alertmanager-metrics-alertmanager']:
         for _ in range(60):
@@ -139,6 +155,9 @@ def runtime():
                 break
             time.sleep(2)
         assert {'node-exporter', 'kubelet'} <= jobs, jobs
+        status, data, _ = request(19090, '/api/v1/query?query=node_uname_info')
+        assert status == 200 and any(s['metric'].get('nodename') == 'elektro-validation-control-plane'
+                                     for s in data['data']['result']), data
         assert isinstance(dashboards, list) and len(dashboards) > 5, dashboards
         assert request(13000, '/api/datasources/proxy/uid/prometheus/api/v1/query?query=up', verified)[0] == 200
         print('Upstream metrics stack is Ready; real node/kubelet samples, dashboards and Grafana auth/role checks passed.')

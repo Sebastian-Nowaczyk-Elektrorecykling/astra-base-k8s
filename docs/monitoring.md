@@ -54,6 +54,13 @@ ready. The Grafana route waits for both monitoring and the existing protected
 gateway access policy. No node IP list or new LAN service IP is needed; the
 existing wildcard DNS, certificate and `EDGE_IP` already cover the hostname.
 
+The chart's rule-validation webhook may still be starting when its first rules
+are submitted. Both install and upgrade use Flux's native `RetryOnFailure`
+strategy: it keeps the operator/certificates and retries as an upgrade every
+minute. An initial webhook connection error should recover automatically;
+uninstalling would restart that bootstrap dependency. The webhook remains
+`failurePolicy: Fail`. See [Flux retry behavior](https://fluxcd.io/flux/components/helm/helmreleases/#install-strategy).
+
 1. At `https://keycloak.admin.internal`, select realm **elektro**, then client
    **elektro-edge**. Add `https://grafana.admin.internal/oauth2/callback` to **Valid
    redirect URIs**, preserving every existing URI. Save. Use your profile's
@@ -182,6 +189,7 @@ kubectl -n monitoring port-forward service/metrics-prometheus 9090:9090
 
 CI renders the exact chart, checks private discovery/auth settings, exercises
 admission denials, and starts the real stack with temporary volumes in kind. It
+exercises the documented install-to-upgrade retry sequence for a starting webhook.
 checks real node/kubelet samples, provisioned dashboards, anonymous denials and
 the proxy user's Viewer role. CI substitutes a localhost proxy allowlist only for
 its port-forward probes. It does not run the full production Cilium/Keycloak/FGA

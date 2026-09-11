@@ -17,12 +17,16 @@ spec:
         namespace: flux-system
   install:
     crds: CreateReplace
-    remediation:
-      retries: 3
+    # Preserve the operator/certificates while a first-install webhook starts.
+    # Uninstall remediation would repeatedly remove the dependencies it needs.
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 1m
   upgrade:
     crds: CreateReplace
-    remediation:
-      retries: 3
+    strategy:
+      name: RetryOnFailure
+      retryInterval: 1m
   values:
     fullnameOverride: metrics
     # k3s embeds these components and binds their metrics to loopback. There is
@@ -56,6 +60,7 @@ spec:
         limits: {memory: 384Mi}
       # Use the existing cert-manager; no certificate patch/setup hook jobs.
       admissionWebhooks:
+        failurePolicy: Fail
         patch:
           enabled: false
         certManager:
@@ -152,6 +157,13 @@ spec:
       dnsPolicy: ClusterFirst
       service:
         enableHostPort: false
+      prometheus:
+        monitor:
+          relabelings:
+            # The pod has its own hostname/UTS namespace. Use Kubernetes' node
+            # name for node_uname_info and dashboard legends, without an IP list.
+            - sourceLabels: [__meta_kubernetes_pod_node_name]
+              targetLabel: nodename
       podLabels:
         elektro.local/metrics-component: node-exporter
       resources:
