@@ -68,7 +68,8 @@ node_uid=$(kubectl get node "$node" -o jsonpath='{.metadata.uid}')
 machine_id=$(kubectl get node "$node" -o json | jq -r ' .status.nodeInfo.machineID')
 longhorn=false delete_emptydir=false timeout=3
 if (evacuate_node) >.cache/drain-pdb.log 2>&1; then
-  echo 'Maintenance unexpectedly bypassed a PodDisruptionBudget.' >&2; exit 1
+  cat .cache/drain-pdb.log >&2
+  echo 'Maintenance unexpectedly continued after a PodDisruptionBudget denial.' >&2; exit 1
 fi
 grep -qi 'disruption budget' .cache/drain-pdb.log
 kubectl -n "$namespace" get pod "$pod" -o json | jq -e '.metadata.deletionTimestamp == null' >/dev/null

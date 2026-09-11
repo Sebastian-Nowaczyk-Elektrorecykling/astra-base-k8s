@@ -61,6 +61,7 @@ member_removed() {
   current=$(kube get node "$node" -o json) || return 1
   jq -e --arg uid "$node_uid" --arg member "$member_name" '.metadata.uid == $uid and .metadata.annotations["etcd.k3s.cattle.io/removed-node-name"] == $member' <<<"$current" >/dev/null
 }
+api_ready() { kube get --raw=/readyz >/dev/null; }
 password_gone() {
   local secret
   secret=$(kube -n kube-system get secret "$node.node-password.k3s" --ignore-not-found -o name) || return 1
@@ -91,6 +92,7 @@ if [[ $phase == retired ]]; then
 fi
 if [[ $phase == stopped ]]; then
   remote stopped "$current_role"
+  wait_until 'the surviving API endpoint after server shutdown/failover' api_ready
   current=$(kube get node "$node" --ignore-not-found -o json)
   if [[ -n $current ]]; then
     assert_same_node

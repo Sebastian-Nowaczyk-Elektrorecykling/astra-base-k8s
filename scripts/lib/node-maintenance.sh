@@ -174,18 +174,19 @@ wait_until() {
 evacuate_node() {
   local lh_node
   assert_same_node
-  kube cordon "$node"
+  kube cordon "$node" || fail "Cannot cordon $node; evacuation was not started."
   if $longhorn; then
-    lh_node=$(kube -n longhorn-system get nodes.longhorn.io "$node" --ignore-not-found -o name)
+    lh_node=$(kube -n longhorn-system get nodes.longhorn.io "$node" --ignore-not-found -o name) || fail "Cannot read the Longhorn node before evacuation."
     if [[ -n $lh_node ]]; then
       kube -n longhorn-system patch nodes.longhorn.io "$node" --type=merge \
-        -p '{"spec":{"allowScheduling":false,"evictionRequested":true}}'
+        -p '{"spec":{"allowScheduling":false,"evictionRequested":true}}' || fail 'Cannot request Longhorn eviction.'
     fi
     wait_until 'Longhorn replicas and backing images to leave the node' storage_evacuated
   fi
   local drain=(drain "$node" --ignore-daemonsets --timeout="${timeout}s")
   if $delete_emptydir; then drain+=(--delete-emptydir-data); fi
-  kube "${drain[@]}"  # PDBs remain enforced: no --force or --disable-eviction.
+  # Explicit failure propagation also works when the function is invoked in a shell condition.
+  kube "${drain[@]}" || fail "Drain of $node failed; resolve its blockers before continuing."
   wait_until 'CSI volumes to detach from the node' attachments_gone
   if $longhorn; then wait_until 'healthy Longhorn copies after draining' storage_evacuated; fi
 }

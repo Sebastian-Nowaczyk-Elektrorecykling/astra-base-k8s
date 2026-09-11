@@ -62,12 +62,15 @@ elif a[:2]==['get','nodes.longhorn.io']:
 elif a[:2]==['get','volumeattachments.storage.k8s.io']: listof(s.get('attachments',[]))
 elif a[:2]==['get','secret']: pass
 elif a[:2]==['get','pods']: listof([])
-elif a[0]=='cordon': s['nodes'][0]['spec']['unschedulable']=True; save()
+elif a[0]=='cordon':
+    if s.get('cordon_blocked'): err('simulated cordon failure')
+    s['nodes'][0]['spec']['unschedulable']=True; save()
 elif a[0]=='uncordon': s['nodes'][0]['spec']['unschedulable']=False; save()
 elif a[0]=='drain':
     if s.get('pdb_blocked'): err('Cannot evict pod as it would violate the pod disruption budget.')
     assert '--force' not in a and '--disable-eviction' not in a
-elif a[0]=='patch': pass
+elif a[0]=='patch':
+    if s.get('eviction_blocked'): err('simulated eviction request failure')
 elif a[0]=='annotate':
     if not s.get('member_stuck'):
         annotations=s['nodes'][0]['metadata']['annotations']
@@ -202,7 +205,18 @@ with tempfile.TemporaryDirectory(dir=ROOT.parent) as tmp:
     assert subprocess.run(['bash','-c',command],env=env).returncode!=0
     (t/'cluster.json').write_text(json.dumps(storage_fixture()))
     assert subprocess.run(['bash','-c',command],env=env).returncode==0
+    # Bash disables errexit for functions in conditional contexts. Fatal mutation failures must still propagate.
+    command2 = """source "$REPO/scripts/lib/node-maintenance.sh"
+node=k8s2 node_uid=k8s2-uid machine_id=123abc longhorn=true delete_emptydir=false timeout=2
+affected='["data"]'
+if (evacuate_node); then exit 9; fi
+"""
+    for blocker in ['cordon_blocked','eviction_blocked','pdb_blocked']:
+        s=storage_fixture();s[blocker]=True;(t/'cluster.json').write_text(json.dumps(s))
+        result=subprocess.run(['bash','-c',command2],env=env,text=True,capture_output=True)
+        assert result.returncode==0,(blocker,result.stdout,result.stderr)
 print('Passed: rebuilding, failed, inactive, unassigned and insufficient replicas are rejected')
+print('Passed: failed cordon, storage patch and drain stop even inside shell conditions')
 
 # Execute the same awk program shipped to the host, checking unrelated settings and taints survive a round trip.
 source=(ROOT/'scripts/lib/node-host.sh').read_text()
