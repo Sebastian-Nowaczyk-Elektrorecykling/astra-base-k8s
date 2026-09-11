@@ -1,0 +1,62 @@
+# Optional. Only the stable control-plane machines peer with the LAN router.
+apiVersion: cilium.io/v2
+kind: CiliumBGPClusterConfig
+metadata:
+  name: lan-router
+spec:
+  nodeSelector:
+    matchExpressions:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+  bgpInstances:
+  - name: lan
+    localASN: ${BGP_LOCAL_ASN}
+    # Cilium initiates TCP 179; no listening port is needed on the laptops.
+    peers:
+    - name: edgerouter
+      peerASN: ${BGP_PEER_ASN}
+      peerAddress: ${BGP_ROUTER_IP}
+      peerConfigRef:
+        name: lan-router
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPPeerConfig
+metadata:
+  name: lan-router
+spec:
+  timers:
+    connectRetryTimeSeconds: 10
+    holdTimeSeconds: 90
+    keepAliveTimeSeconds: 30
+  families:
+  - afi: ipv4
+    safi: unicast
+    advertisements:
+      matchLabels:
+        elektro.local/bgp: private-services
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPAdvertisement
+metadata:
+  name: private-services
+  labels:
+    elektro.local/bgp: private-services
+spec:
+  advertisements:
+  - advertisementType: Service
+    service:
+      addresses:
+      - LoadBalancerIP
+    selector:
+      matchLabels:
+        io.kubernetes.service.namespace: kube-system
+        io.kubernetes.service.name: lan-dns
+  - advertisementType: Service
+    service:
+      addresses:
+      - LoadBalancerIP
+    selector:
+      matchLabels:
+        io.kubernetes.service.namespace: envoy-gateway-system
+        gateway.envoyproxy.io/owning-gateway-namespace: edge
+        gateway.envoyproxy.io/owning-gateway-name: platform

@@ -7,9 +7,10 @@ The base deploys upstream **CoreDNS 1.14.7** as `kube-system/lan-dns`. Point a c
 Edit the tracked `clusters/laptops/settings.yaml`, retaining your actual API and other cluster settings. See [the settings reference](clusters.md#what-to-put-in-settingsyaml) for every field and the distinction between LAN and cluster-private IPs:
 
 ```yaml
-  EDGE_IP: 192.168.50.240
-  DNS_IP: 192.168.50.242
-  DNS_CLIENT_CIDR: 192.168.50.0/24
+  LAN_CIDR: 192.168.2.0/24
+  EDGE_IP: 192.168.2.240
+  DNS_IP: 192.168.2.242
+  DNS_CLIENT_CIDR: 192.168.2.0/24
   DNS_UPSTREAMS: '1.1.1.1 9.9.9.9'
   INTERNAL_DOMAIN: internal
 ```
@@ -38,7 +39,6 @@ kubectl -n kube-system get service lan-dns
 
 The normal Flux dependency graph performs this ordering automatically. Existing clusters do not need another Cilium/Flux bootstrap. `local/cluster.env` does not configure this service; Flux reads the tracked settings. Wait for the Service's `EXTERNAL-IP` to equal `DNS_IP`, then test it before changing client DNS. A pending IP usually means the address is outside the pool, already allocated, or the updated network resources have not reconciled.
 
-If you installed the earlier `dns-system/lan-dns`, Flux moves it to `kube-system` so it can mount k3s's ConfigMap without API credentials. Expect a DNS interruption while the old Service releases `DNS_IP` and the replacement acquires it. Keep independent DNS for the nodes/workstation during this maintenance, then verify the new Service. The empty legacy namespace is retained to avoid automatic namespace deletion. Existing `.internal` application names, credentials and data do not change. Remove obsolete `K8S1_IP`/`K8S2_IP`/`K8S3_IP` overrides from any local branch; they are no longer used.
 
 ## Answers and client setup
 
@@ -56,12 +56,12 @@ The application wildcards currently provide IPv4 A records. An AAAA/TXT/HTTPS qu
 `prepare-workstation.sh` installs `dig` through Debian's `dnsutils` package. Test both transports (replace the example address):
 
 ```sh
-dig @192.168.50.242 k8s1.hosts.internal A
-dig @192.168.50.242 foo-a7c92e.test.internal A
-dig @192.168.50.242 foo-b41d08.test.internal A +tcp
-dig @192.168.50.242 missing.hosts.internal A
-dig @192.168.50.242 longhorn.admin.internal AAAA
-dig @192.168.50.242 example.org A
+dig @192.168.2.242 k8s1.hosts.internal A
+dig @192.168.2.242 foo-a7c92e.test.internal A
+dig @192.168.2.242 foo-b41d08.test.internal A +tcp
+dig @192.168.2.242 missing.hosts.internal A
+dig @192.168.2.242 longhorn.admin.internal AAAA
+dig @192.168.2.242 example.org A
 ```
 
 On a Debian desktop using NetworkManager, select your connection under network settings, disable automatic DNS and enter `DNS_IP`. A CLI equivalent is:
@@ -70,7 +70,7 @@ On a Debian desktop using NetworkManager, select your connection under network s
 nmcli connection show
 # Replace the connection name and example IP below.
 sudo nmcli connection modify 'Wired connection 1' \
-  ipv4.ignore-auto-dns yes ipv4.dns '192.168.50.242' ipv6.ignore-auto-dns yes
+  ipv4.ignore-auto-dns yes ipv4.dns '192.168.2.242' ipv6.ignore-auto-dns yes
 sudo nmcli connection up 'Wired connection 1'
 getent ahostsv4 longhorn.admin.internal
 ```

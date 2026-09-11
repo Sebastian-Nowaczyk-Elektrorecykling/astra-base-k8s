@@ -67,17 +67,17 @@ Choose exactly one of these commands on the machine, using its actual IP and a s
 
 ```sh
 # Hybrid server, with workload capacity:
-sudo bash scripts/install-k3s.sh --role hybrid --name k8s2 --ip 192.168.50.12 \
+sudo bash scripts/install-k3s.sh --role hybrid --name k8s2 --ip 192.168.2.154 \
   --config local/cluster.env --server https://k8s1.hosts.internal:6443 \
   --token-file /root/k3s-join-token
 
 # Dedicated controller:
-sudo bash scripts/install-k3s.sh --role controller --name k8s2 --ip 192.168.50.12 \
+sudo bash scripts/install-k3s.sh --role controller --name k8s2 --ip 192.168.2.154 \
   --config local/cluster.env --server https://k8s1.hosts.internal:6443 \
   --token-file /root/k3s-join-token
 
 # Worker:
-sudo bash scripts/install-k3s.sh --role worker --name k8s2 --ip 192.168.50.12 \
+sudo bash scripts/install-k3s.sh --role worker --name k8s2 --ip 192.168.2.154 \
   --config local/cluster.env --server https://k8s1.hosts.internal:6443 \
   --token-file /root/k3s-join-token
 ```

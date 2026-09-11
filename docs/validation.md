@@ -14,6 +14,8 @@ The Debian jobs also exercise `configure-cluster.sh` with a nondefault API IP an
 
 They also create two additional profiles through the real `create-cluster.sh`, build their shared reconciliation graph with Kustomize, check each secrets path, round-trip settings into exported env files, inspect the actual k3s configuration for automatic worker IP selection and reject a kubeconfig for a different cluster. These checks leave the laptops profile and its credentials untouched.
 
+`tests/network-settings.py` checks different `192.168` LAN prefixes, pool boundaries, overlap rejection, API/pool separation and BGP opt-in constraints. Chart rendering tests BGP both disabled and enabled. The BGP CRs undergo strict server-side validation against the pinned Cilium schemas; advertisement selectors exclude the public gateway and other services. EdgeOS commands and real BGP establishment/failover require the [router acceptance checks](bgp.md#addresses-dns-and-acceptance).
+
 These checks do not exercise physical Debian installation, Cilium's real LAN/ARP/WireGuard behavior, Longhorn iSCSI and disk recovery, browser sessions, Google credentials, GPU drivers, or a complete production cluster. Complete the following acceptance checks on your hardware before relying on the foundation.
 
 The routing tests exercise all four internal groups, randomized test names, reserved host names, wildcard rejection, disabled public exposure, explicit external aliases and public identity path restrictions against the API server's actual CEL admission policies. They repeat private routing and configuration checks with a second cluster suffix. These are configuration/admission checks; public DNS, NAT, TLS and live HTTP routing still need the deployment acceptance checks below.

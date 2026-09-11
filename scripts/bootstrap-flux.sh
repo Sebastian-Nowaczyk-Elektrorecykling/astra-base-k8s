@@ -12,7 +12,7 @@ config=${2:-$repo/local/cluster.env}
 source "$config"
 # shellcheck source=lib/cluster-settings.sh
 source "$repo/scripts/lib/cluster-settings.sh"
-select_cluster "${CLUSTER_NAME:-laptops}"
+select_cluster "${CLUSTER_NAME:?Export a named profile with configure-cluster.sh --export first.}"
 cluster_path="clusters/$cluster_name"
 # Fail before bootstrap can replace a working CNI with a stale example address.
 bash "$repo/scripts/configure-cluster.sh" --check "$config"
@@ -33,7 +33,7 @@ fi
 if ! kubectl kustomize "$cluster_dir/flux-system" | \
   awk '/^kind: Deployment$/ {found=1} END {exit !found}'; then
   echo 'Flux component Kustomization must build controller Deployments.' >&2
-  echo 'Pull the bootstrap fix: gotk-components.yaml and gotk-sync.yaml must both be referenced.' >&2
+  echo 'gotk-components.yaml and gotk-sync.yaml must both be referenced.' >&2
   exit 1
 fi
 origin=$(git -C "$repo" remote get-url origin)

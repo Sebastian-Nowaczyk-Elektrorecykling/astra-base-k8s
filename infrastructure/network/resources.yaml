@@ -54,7 +54,6 @@ spec:
       - identity
       - authorization
       - edge
-      - dns-system
       - monitoring
   ingress:
   - fromEndpoints:

@@ -1,5 +1,7 @@
 # Bootstrap from fresh Debian
 
+For a replacement of a wiped cluster, first follow [the rebuild checklist](rebuild.md) to retire old credentials and state.
+
 ## 1. Make the local choices
 
 Use Debian 12/13 with a current kernel, SSDs, synchronized time, working DNS and preferably wired Ethernet. The scripts disable swap, load the required kernel modules, install iSCSI/NFS tools and make mounts shared. `--disable-sleep` handles lids and suspend targets. Reboot and verify no desktop power manager or zram service re-enables swap/suspend. Have enough free RAM for the platform and your workloads; measure actual use before loading models. The default requests favor a small cluster; Keycloak alone requests 768 MiB.
@@ -8,19 +10,19 @@ Reserve, for example:
 
 | Purpose | Example |
 | --- | --- |
-| Initial controller k8s1 | Stable `192.168.50.11`; workers may use ordinary DHCP |
-| Initial Kubernetes API | `192.168.50.11:6443` |
-| Optional future API VIP | `192.168.50.10` (outside service pool) |
-| Cilium service pool | `192.168.50.240`–`.249`, outside DHCP |
-| Gateway IP | `192.168.50.240` |
-| LAN DNS IP | `192.168.50.242` (separate reservation in the service pool) |
+| Initial controller k8s1 | Stable `192.168.2.153`; workers may use ordinary DHCP |
+| Initial Kubernetes API | `192.168.2.153:6443` |
+| Optional future API VIP | `192.168.2.10` (outside service pool) |
+| Cilium service pool | `192.168.2.240`–`.249`, outside DHCP |
+| Gateway IP | `192.168.2.240` |
+| LAN DNS IP | `192.168.2.242` (separate reservation in the service pool) |
 | Application DNS | `*.internal`, `*.admin.internal`, `*.test.internal`, `*.staging.internal` → private gateway IP |
 | Machine DNS | `NODE.hosts.internal` → each registered node's reported LAN IP, discovered automatically |
 | Pod / Service CIDRs | `10.42.0.0/16` / `10.43.0.0/16` |
 
-Change the LAN addresses in `clusters/laptops/settings.yaml`; [the settings reference](clusters.md#what-to-put-in-settingsyaml) explains every field. These examples must match your actual subnet. Keep `INTERNAL_DOMAIN: internal`, `IDENTITY_HOST: keycloak.admin.internal` and the shared `PUBLIC_EDGE_IP: NOT_CONFIGURED` default for the private setup. Configure the [LAN DNS service](dns.md), including `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS`; no node inventory is needed. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Keep working external DNS during bootstrap; after Flux starts CoreDNS, point client machines at `DNS_IP`. Keep cluster hosts' bootstrap DNS independent as explained in the DNS runbook. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. For routed networks use Cilium BGP instead, as a reviewed replacement of the L2 policy.
+Change the LAN addresses in `clusters/laptops/settings.yaml`; [the settings reference](clusters.md#what-to-put-in-settingsyaml) explains every field. These examples must match your actual subnet. Keep `INTERNAL_DOMAIN: internal`, `IDENTITY_HOST: keycloak.admin.internal` and the shared `PUBLIC_EDGE_IP: NOT_CONFIGURED` default for the private setup. Configure the [LAN DNS service](dns.md), including `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS`; no node inventory is needed. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Keep working external DNS during bootstrap; after Flux starts CoreDNS, point client machines at `DNS_IP`. Keep cluster hosts' bootstrap DNS independent as explained in the DNS runbook. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. The [EdgeRouter guide](bgp.md) gives the minimum router setup and an optional BGP configuration. BGP is disabled by default.
 
-After installing workstation tools, edit the tracked settings and export the shared bootstrap values:
+Install the workstation tools below before running this export. Edit the tracked settings, then export the shared bootstrap values:
 
 ```sh
 mkdir -p local
@@ -42,8 +44,6 @@ The installer supports Debian 12/13 on amd64 and arm64. It installs Git, the SSH
 
 The script prepares administration tools only. Cluster-node preparation remains `scripts/prepare-debian.sh`; workstation installation does not configure kubeconfig, generate credentials, change swap, install a container runtime or join a cluster.
 
-If you already installed nodes with the original `astra.local` labels, follow [the Elektro naming update](rename-elektro.md) before continuing with Flux.
-
 ## 2. Prepare and start nodes
 
 On each machine:
@@ -60,7 +60,7 @@ sudo reboot
 After reconnecting, initialize **exactly one** server:
 
 ```sh
-sudo bash scripts/install-k3s.sh --role hybrid --name k8s1 --ip 192.168.50.11 \
+sudo bash scripts/install-k3s.sh --role hybrid --name k8s1 --ip 192.168.2.153 \
   --config local/cluster.env --init
 ```
 
@@ -71,7 +71,7 @@ Transfer `/var/lib/rancher/k3s/server/token` from k8s1 to a root-readable file o
 ```sh
 # On k8s2 (repeat with any unique name for additional workers):
 sudo bash scripts/install-k3s.sh --role worker --name k8s2 --ip auto \
-  --config local/cluster.env --server https://192.168.50.11:6443 \
+  --config local/cluster.env --server https://192.168.2.153:6443 \
   --token-file /root/k3s-join-token
 ```
 
@@ -89,9 +89,9 @@ kubectl get nodes -o wide
 
 The normal Helm release is installed once to solve the CNI/bootstrap dependency. Flux later reconciles that same release, namespace, version and shared values file. There is no k3s HelmChart resource racing Flux. Do not re-enable Flannel, kube-proxy, Traefik, ServiceLB or local-path storage.
 
-Review the settings file and include it in the commit below. Flux cannot read your ignored `local/cluster.env`: it uses the merged tracked settings ConfigMap. Prefer editing the profile and re-exporting its env. For an existing env file, `bash scripts/configure-cluster.sh local/cluster.env` imports its API, Pod/Service networks, kube-dns IP and private suffix into the selected profile; review, commit and push that change. Load-balancer/DNS values remain in `settings.yaml` unless explicitly included in that trusted env file. Old files without `CLUSTER_NAME` select `laptops` for compatibility.
+Review the settings file and include it in the commit below. Flux cannot read your ignored `local/cluster.env`: it uses the merged tracked settings ConfigMap. Prefer editing the profile and re-exporting its env. For an existing env file, `bash scripts/configure-cluster.sh local/cluster.env` imports its API, Pod/Service networks, kube-dns IP and private suffix into the selected profile; review, commit and push that change. Load-balancer/DNS values remain in `settings.yaml` unless explicitly included in that trusted env file. The exported file must include `CLUSTER_NAME` and `INTERNAL_DOMAIN`.
 
-If Flux already manages Cilium, the bootstrap script stops before running Helm against that managed release. Use [Cilium API-address recovery](cilium-api-recovery.md) if pods are already connecting to the wrong server.
+If Flux already manages Cilium, the bootstrap script stops before running Helm against that managed release. For an API endpoint change, use the [HA runbook](high-availability.md#add-controllers).
 
 ## 4. Encrypt secrets and bootstrap Flux
 
@@ -116,9 +116,7 @@ The GitHub token bootstraps Flux's read-only SSH deploy key; the token is not st
 
 Before making cluster changes, `bootstrap-flux.sh` verifies that bootstrap values agree with the selected profile, that kubeconfig points at its API, and that the profile and shared infrastructure match `origin/main`. This prevents Flux from replacing the working Cilium API address with an old Git value or bootstrapping the wrong selected cluster. If your local config has a different path, pass it as the second argument: `bash scripts/bootstrap-flux.sh local/age.agekey /path/to/cluster.env`.
 
-The checked-in `flux-system/kustomization.yaml` references both `gotk-components.yaml` and `gotk-sync.yaml`. The latter starts as a comment-only placeholder, then Flux writes the real GitRepository and Kustomization during bootstrap. Flux preserves an existing Kustomization's resource list: leaving it empty causes `no Kubernetes objects found` even after the controllers' YAML has been generated. This layout follows [Flux's bootstrap customization procedure](https://fluxcd.io/flux/installation/configuration/bootstrap-customization/).
-
-To resume the previously failed attempt, pull this fix and rerun `bash scripts/bootstrap-flux.sh local/age.agekey` with the same key and temporary GitHub token. The [recovery guide](rename-elektro.md) includes the node-label update. Preserve your existing encrypted secrets and generated component manifests; there is no need to reinstall k3s or regenerate credentials.
+The checked-in Flux resource list includes its generated controllers and sync configuration, following [Flux bootstrap customization](https://fluxcd.io/flux/installation/configuration/bootstrap-customization/). Keep both references when customizing a profile.
 
 Flux starts prerequisites before consumers. `foundation → cilium → controllers → admission → storage → databases → identity/authorization → edge → access → routes` is the main chain; certificates and secrets have their own prerequisites. Helm installation/remediation uses upstream chart jobs and service accounts without a handcrafted fixup controller.
 
@@ -169,7 +167,4 @@ Keep an offline recovery kubeconfig and console/SSH access. Port-forward permiss
 
 ## Metrics after bootstrap
 
-The shared base also installs the metrics stack. Register the Grafana callback on
-an existing realm and grant access to `grafana.admin.internal` following
-[metrics setup](monitoring.md#enable-access-on-an-existing-cluster). Fresh imports
-include the callback; no grants or external alert notifications are automatic.
+The shared base also installs the metrics stack. Grant access to `grafana.admin.internal` following [metrics setup](monitoring.md#enable-access). The realm import includes the callback; no grants or external alert notifications are automatic.

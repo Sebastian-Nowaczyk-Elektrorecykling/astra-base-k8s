@@ -23,6 +23,7 @@ Use **LAN addresses** for the API, DNS and gateway. `Node.status.addresses` call
 | --- | --- |
 | `CLUSTER_NAME` | The directory name, currently `laptops`. Set by the profile creator. |
 | `API_HOST` | Reachable controller LAN IP, initially your working `192.168.2.153`, or a tested stable API VIP/name. No scheme or port. It must be covered by the API certificate. |
+| `LAN_CIDR` | The actual wired LAN subnet and mask, initially `192.168.2.0/24`. The complete L2 service pool must be inside it. |
 | `EDGE_IP` | An unused **LAN virtual IP** for internal HTTPS applications. Cilium advertises it; do not assign it to a laptop interface. |
 | `DNS_IP` | A different unused **LAN virtual IP** for TCP/UDP DNS. This is the DNS server address to put on client machines. |
 | `LB_START`, `LB_STOP` | The start/end of a small LAN range Cilium can allocate. Include the DNS and gateway IPs. Exclude this whole range from DHCP and other static allocations. |
@@ -35,20 +36,11 @@ Use **LAN addresses** for the API, DNS and gateway. `Node.status.addresses` call
 | `INTERNAL_DOMAIN` | `internal` preserves current names. A second cluster can use `production.internal`, producing `*.hosts.production.internal`, `*.admin.production.internal`, `*.test.production.internal`, etc. |
 | `IDENTITY_HOST` | `keycloak.admin.INTERNAL_DOMAIN` for private access. Existing cluster: `keycloak.admin.internal`. The public-exposure runbook covers changing the canonical issuer later. |
 | `PUBLIC_EDGE_IP` | Leave the shared default `NOT_CONFIGURED` until deliberately enabling the separate public gateway. |
+| `BGP_ENABLED`, `BGP_ROUTER_IP`, `BGP_LOCAL_ASN`, `BGP_PEER_ASN` | Leave shared defaults for ordinary L2 networking. See [optional EdgeRouter BGP](bgp.md) before enabling and adding its separate reconciliation stage. |
 | `PG_IMAGE` | Shared PostgreSQL image pin; normally leave the default. |
 | `FGA_STORE_ID`, `FGA_MODEL_ID` | Start with the shared `NOT_CONFIGURED` defaults. After initializing OpenFGA **on this cluster**, put its returned IDs in this profile. Do not reuse another cluster's IDs. |
 
-Your tracked `API_HOST` is `192.168.2.153`, while the old gateway/DNS/pool values are still `192.168.50.*` examples. Determine your actual LAN subnet with `ip -4 addr` and `ip -4 route`; an API IP alone does not reveal its subnet mask. If your LAN is `192.168.2.0/24`, an illustrative configuration is:
-
-```yaml
-  API_HOST: 192.168.2.153
-  LB_START: 192.168.2.240
-  LB_STOP: 192.168.2.249
-  EDGE_IP: 192.168.2.240
-  DNS_IP: 192.168.2.242
-  DNS_CLIENT_CIDR: 192.168.2.0/24
-  DNS_UPSTREAMS: '1.1.1.1 9.9.9.9'
-```
+The laptops defaults are internally consistent for **`192.168.2.0/24`**: API `192.168.2.153`, gateway `.240`, DNS `.242`, and pool `.240`–`.249`. Determine your actual subnet with `ip -4 addr` and `ip -4 route`; `192.168.x.x` does not imply a particular mask. For another LAN, change `LAN_CIDR`, `API_HOST`, the pool, both VIPs and `DNS_CLIENT_CIDR` together. Leave the `10.42.0.0/16` Pod and `10.43.0.0/16` Service ranges alone unless they overlap a real VPN/routed network.
 
 Use those addresses only after checking that they are free and excluded from DHCP. You do **not** need a DHCP reservation per virtual IP or per worker: exclude one small pool range once. Reserve stable addresses for the control-plane machines/API endpoint. Workers can use ordinary DHCP.
 
@@ -68,7 +60,7 @@ bash scripts/configure-cluster.sh --export production > local/production/cluster
 
 The creator installs nothing and contacts no cluster. It builds a new entry point from the template, reuses the shared base and generates the pinned Flux controller manifests. It refuses to overwrite an existing profile, and copies no age keys, kubeconfig, encrypted credentials, OpenFGA state or generated sync from `laptops`.
 
-Use the exported env file on that cluster's nodes. It contains `CLUSTER_NAME`, API endpoint, Pod/Service networks, kube-dns IP and the private suffix. Editing the tracked profile and re-exporting avoids maintaining these values twice. Legacy `configure-cluster.sh local/cluster.env` remains available to import an existing env file into the selected profile; missing `CLUSTER_NAME` means `laptops` for compatibility. It now synchronizes Service CIDR, kube-dns IP and the internal suffix too.
+Use the exported env file on that cluster's nodes. It contains `CLUSTER_NAME`, API endpoint, Pod/Service networks, kube-dns IP and the private suffix. Editing the tracked profile and re-exporting avoids maintaining these values twice. `configure-cluster.sh FILE` can import a trusted exported env file when deliberately changing an API endpoint. `CLUSTER_NAME` and `INTERNAL_DOMAIN` are required, so an unnamed old file cannot select a cluster implicitly.
 
 Follow the normal [bootstrap runbook](bootstrap.md) with your new node names and files. For example:
 

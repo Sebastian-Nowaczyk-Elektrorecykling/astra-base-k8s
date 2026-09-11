@@ -21,8 +21,7 @@ if [[ ${1:-} == --check ]]; then check=true; shift; fi
 # Administrator-controlled shell configuration, also consumed by install-k3s.sh.
 # shellcheck source=/dev/null
 source "$1"
-select_cluster "${CLUSTER_NAME:-laptops}"
-INTERNAL_DOMAIN=${INTERNAL_DOMAIN:-internal}
+select_cluster "${CLUSTER_NAME:?Export a named profile with configure-cluster.sh --export first.}"
 current=$(cluster_settings_json)
 jq -e --arg cluster "$cluster_name" '.data.CLUSTER_NAME == $cluster' <<<"$current" >/dev/null || {
   echo 'CLUSTER_NAME in settings.yaml does not match its directory.' >&2; exit 2;
@@ -33,7 +32,7 @@ for key in API_HOST POD_CIDR SERVICE_CIDR CLUSTER_DNS INTERNAL_DOMAIN; do
   patch=$(jq --arg key "$key" --arg value "${!key}" '.data[$key]=$value' <<<"$patch")
 done
 # Optional LAN settings can also be supplied by an existing administrator env file.
-for key in EDGE_IP DNS_IP DNS_CLIENT_CIDR DNS_UPSTREAMS LB_START LB_STOP LAN_INTERFACE_REGEX IDENTITY_HOST PUBLIC_EDGE_IP; do
+for key in LAN_CIDR EDGE_IP DNS_IP DNS_CLIENT_CIDR DNS_UPSTREAMS LB_START LB_STOP LAN_INTERFACE_REGEX IDENTITY_HOST PUBLIC_EDGE_IP; do
   if [[ -n ${!key:-} ]]; then
     patch=$(jq --arg key "$key" --arg value "${!key}" '.data[$key]=$value' <<<"$patch")
   fi

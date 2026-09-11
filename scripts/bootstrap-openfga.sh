@@ -8,7 +8,6 @@ repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 source "$repo/scripts/lib/cluster-settings.sh"
 select_cluster "${2:-}"
 state="$repo/local/$cluster_name/openfga-state.json"
-if [[ $cluster_name == laptops && -e $repo/local/openfga-state.json ]]; then state="$repo/local/openfga-state.json"; fi
 [[ ! -e $state ]] || { echo "Store already recorded in $state; do not create another on reruns." >&2; exit 1; }
 umask 077
 install -d -m 0700 "$repo/local/$cluster_name"

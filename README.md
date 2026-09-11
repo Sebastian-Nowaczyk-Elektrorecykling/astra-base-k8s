@@ -27,9 +27,7 @@ Read [cluster settings and reuse](docs/clusters.md) for a field-by-field IP expl
 
 On a fresh Debian administrator workstation, run `sudo bash scripts/prepare-workstation.sh` to install the required command-line tools. The setup is named **Elektro**; its existing GitHub repository remains `astra-base-k8s`.
 
-If an earlier bootstrap failed with `no Kubernetes objects found`, follow [the recovery and node-label update](docs/rename-elektro.md) before retrying.
-
-If Cilium is contacting an old API address, follow [API-address recovery](docs/cilium-api-recovery.md). Flux reads the tracked settings, so a change only in `local/cluster.env` must be copied with `scripts/configure-cluster.sh` and committed.
+For another clean installation of the same profile, follow [rebuild laptops from scratch](docs/rebuild.md). The default networking uses Cilium L2; [optional EdgeRouter BGP](docs/bgp.md) uses only stable controller peers.
 
 ```sh
 # On each freshly installed Debian host, from this repository:
@@ -38,7 +36,7 @@ sudo bash scripts/prepare-debian.sh --disable-sleep
 # bash scripts/configure-cluster.sh --export laptops > local/cluster.env
 
 # On k8s1:
-sudo bash scripts/install-k3s.sh --role hybrid --name k8s1 --ip 192.168.50.11 \
+sudo bash scripts/install-k3s.sh --role hybrid --name k8s1 --ip 192.168.2.153 \
   --config local/cluster.env --init
 ```
 
@@ -56,7 +54,7 @@ Continue with the runbook; this command alone does not install the platform. Sup
 
 Point clients at the CoreDNS service's **LAN** `DNS_IP`, directly or through DHCP. Configure `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS` in `clusters/laptops/settings.yaml`; see [LAN DNS setup](docs/dns.md). Registered node addresses are discovered automatically from k3s; unknown machine names return NXDOMAIN. Wildcard DNS and certificates support new application names; each application still needs an exact route, callback and permission grant. The separate application-platform Flux repository owns deployment naming and lifecycle.
 
-Internet exposure is **off by default**. An optional separate public gateway has its own IP, certificate and exact routes. `fuzzy.elektrorecykling.pl` can target the same Service as `foo.internal`; `bar.internal` remains private. Forwarding the private gateway to the Internet would defeat this boundary. See [DNS and migration](docs/domains.md) and [explicit public exposure](examples/public-exposure/README.md).
+Internet exposure is **off by default**. An optional separate public gateway has its own IP, certificate and exact routes. `fuzzy.elektrorecykling.pl` can target the same Service as `foo.internal`; `bar.internal` remains private. Forwarding the private gateway to the Internet would defeat this boundary. See [Internal domains](docs/domains.md) and [explicit public exposure](examples/public-exposure/README.md).
 
 ## Storage defaults
 
@@ -81,6 +79,8 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 - [Bootstrap](docs/bootstrap.md)
 - [Cluster settings, DHCP and multiple clusters](docs/clusters.md)
 - [LAN DNS](docs/dns.md)
+- [EdgeRouter and optional BGP](docs/bgp.md)
+- [Rebuild laptops from scratch](docs/rebuild.md)
 - [Metrics, Grafana access and retention](docs/monitoring.md)
 - [Identity, dynamic projects, agents and OpenFGA](docs/identity-access.md)
 - [HA and node roles](docs/high-availability.md)

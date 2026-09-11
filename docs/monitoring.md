@@ -47,7 +47,7 @@ expose cluster data. Data-source query permissions alone do not filter the serie
 within a shared source. That tenant design belongs with the separate application
 platform repository.
 
-## Enable access on an existing cluster
+## Enable access
 
 Flux installs the stack automatically after storage and network policies are
 ready. The Grafana route waits for both monitoring and the existing protected
@@ -61,12 +61,9 @@ minute. An initial webhook connection error should recover automatically;
 uninstalling would restart that bootstrap dependency. The webhook remains
 `failurePolicy: Fail`. See [Flux retry behavior](https://fluxcd.io/flux/components/helm/helmreleases/#install-strategy).
 
-1. At `https://keycloak.admin.internal`, select realm **elektro**, then client
-   **elektro-edge**. Add `https://grafana.admin.internal/oauth2/callback` to **Valid
-   redirect URIs**, preserving every existing URI. Save. Use your profile's
-   suffix on another cluster. Fresh realm imports already include this URI;
-   Keycloak deliberately skips reimporting an existing realm.
-2. Initialize OpenFGA if you have not yet done bootstrap part 5. Follow
+The initial realm import includes the Grafana callback.
+
+1. Initialize OpenFGA if you have not yet done bootstrap part 5. Follow
    [the grant procedure](identity-access.md#initialize-openfga), with your Keycloak
    user UUID and object `service:grafana.admin.internal`. For example, the request
    body in `local/grafana-grant.json` is:
@@ -85,7 +82,7 @@ uninstalling would restart that bootstrap dependency. The webhook remains
    file and local port-forward described there. Do not create another store or
    replace the authorization model. An alternative is a grant to your existing
    `group:platform-admins#member`; group membership must already be deliberate.
-3. Visit **https://grafana.admin.internal** with the cluster CA trusted on the
+2. Visit **https://grafana.admin.internal** with the cluster CA trusted on the
    workstation. You should be redirected to Keycloak and then see the Kubernetes
    dashboards. A login without a matching grant must be denied.
 

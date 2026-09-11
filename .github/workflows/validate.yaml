@@ -61,6 +61,7 @@ jobs:
           for file in scripts/*.sh scripts/lib/*.sh tests/*.sh; do bash -n "$file"; done
           shellcheck -x -P SCRIPTDIR scripts/*.sh scripts/lib/*.sh tests/*.sh
           python tests/node-maintenance.py
+          python tests/network-settings.py
           python tests/render.py --charts
           python tests/metrics.py
       - name: Verify DNS answers, forwarding and live reloads

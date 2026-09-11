@@ -111,7 +111,7 @@ spec:
       has(m.path) && m.path.type == ''PathPrefix'' && m.path.value in [''/realms/elektro'',''/resources'']))))'
     message: Only Keycloak may use the native identity listener; public identity paths exclude administration.
   - expression: '!variables.public || variables.native || object.spec.rules.all(r, !has(r.filters) && has(r.backendRefs)
-      && r.backendRefs.size() > 0 && r.backendRefs.all(b, has(b.namespace) && !(b.namespace in [''kube-system'',''flux-system'',''identity'',''authorization'',''edge'',''envoy-gateway-system'',''cert-manager'',''kyverno'',''longhorn-system'',''cnpg-system'',''gpu-system'',''dns-system'',''monitoring''])
+      && r.backendRefs.size() > 0 && r.backendRefs.all(b, has(b.namespace) && !(b.namespace in [''kube-system'',''flux-system'',''identity'',''authorization'',''edge'',''envoy-gateway-system'',''cert-manager'',''kyverno'',''longhorn-system'',''cnpg-system'',''gpu-system'',''monitoring''])
       && (!has(b.group) || b.group == '''') && (!has(b.kind) || b.kind == ''Service'') && !has(b.filters)))'
     message: Public application routes must directly reference application Services without filters or infrastructure
       backends.

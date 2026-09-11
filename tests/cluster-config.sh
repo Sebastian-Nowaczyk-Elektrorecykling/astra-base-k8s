@@ -11,12 +11,20 @@ cp "$repo/scripts/validate-cluster.py" "$tmp/scripts/"
 cp "$repo/scripts/configure-cluster.sh" "$tmp/scripts/"
 cp "$repo/clusters/laptops/settings.yaml" "$tmp/clusters/laptops/"
 settings="$tmp/clusters/laptops/settings.yaml"
+# Files from the retired unnamed bootstrap must not silently target laptops.
+printf 'API_HOST=192.168.2.153\n' >"$tmp/unnamed.env"
+if bash "$tmp/scripts/configure-cluster.sh" "$tmp/unnamed.env" >"$tmp/unnamed.log" 2>&1; then
+  echo 'An unnamed bootstrap file was accepted.' >&2; exit 1
+fi
+grep -Fq 'Export a named profile' "$tmp/unnamed.log"
 kubectl patch --local --type=merge --patch '{"data":{"API_HOST":"old-api.invalid","POD_CIDR":"10.99.0.0/16"}}' \
   -f "$settings" -o yaml >"$tmp/initial.yaml"
 mv "$tmp/initial.yaml" "$settings"
 before=$(kubectl patch --local --type=merge --patch '{}' -f "$settings" -o json | jq -S 'del(.data.API_HOST, .data.POD_CIDR, .data.SERVICE_CIDR, .data.CLUSTER_DNS)')
 for host in 198.51.100.17 api.elektro.example; do
   cat >"$tmp/cluster.env" <<EOF
+CLUSTER_NAME=laptops
+INTERNAL_DOMAIN=internal
 API_HOST=$host
 POD_CIDR=10.88.0.0/16
 SERVICE_CIDR=10.89.0.0/16

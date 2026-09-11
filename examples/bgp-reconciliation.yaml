@@ -1,0 +1,24 @@
+# Copy into clusters/NAME and list it in that profile's kustomization.yaml.
+# Also set BGP_ENABLED: 'true' and BGP_ROUTER_IP in that profile's settings.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: bgp
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 5m
+  path: ./infrastructure/bgp
+  prune: true
+  # Peer establishment is a separate router acceptance check, not a bootstrap gate.
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  postBuild:
+    substituteFrom:
+    - kind: ConfigMap
+      name: cluster-settings
+  dependsOn:
+  - name: network

@@ -98,7 +98,7 @@ for change in ['namespace', 'name', 'address', 'port', 'selector', 'nodeports', 
     check(bad, 'Only managed gateways or the restricted LAN DNS service')
 
 # Switch only the disposable cluster's admission settings to test explicit public opt-in.
-values = dict(settings, PUBLIC_EDGE_IP='192.168.50.241', IDENTITY_HOST='login.elektrorecykling.pl')
+values = dict(settings, PUBLIC_EDGE_IP='192.168.2.241', IDENTITY_HOST='login.elektrorecykling.pl')
 assert values['PUBLIC_EDGE_IP'] != values['EDGE_IP']
 subprocess.run(['kubectl', 'apply', '--server-side', '--field-manager=elektro-validation', '-f', '-'],
                input=yaml.safe_dump_all(render('infrastructure/admission/guards.yaml', values)),

@@ -81,11 +81,13 @@ def static():
             visit(dep["name"], trail + [name])
     for name in by_name:
         visit(name, [])
+    assert 'bgp' not in by_name, 'BGP must remain an optional profile stage'
     classes = read(ROOT / "infrastructure/storage/classes.yaml")
     assert {c["metadata"]["name"]: c["parameters"]["numberOfReplicas"] for c in classes} == {
         "longhorn": "1", "longhorn-3": "3", "longhorn-cnpg": "1"}
     assert all(c["reclaimPolicy"] == "Retain" and c["parameters"]["dataEngine"] == "v1" for c in classes)
     settings = profile_settings()
+    assert read(ROOT / 'clusters/base/defaults.yaml')[0]['data']['BGP_ENABLED'] == 'false', 'BGP must default off; individual profiles can opt in'
     sp = configured(ROOT / "infrastructure/access/resources.yaml", settings)[0]["spec"]
     realm_config = configured(ROOT / "infrastructure/identity/resources.yaml", settings)[0]["data"]
     realm = json.loads(realm_config["elektro-realm.json"])
@@ -156,7 +158,8 @@ def static():
 def render():
     settings = profile_settings()
     # Optional examples also get explicit sample values during validation.
-    settings.update(API_VIP="192.168.50.10", API_VIP_INTERFACE="eth0")
+    settings.update(API_VIP="192.168.2.10", API_VIP_INTERFACE="eth0",
+                    BGP_ROUTER_IP="192.168.2.1")
     manifests = []
     for p in sorted((ROOT / "infrastructure").rglob("kustomization.yaml")):
         text = run("kubectl", "kustomize", str(p.parent))
@@ -206,6 +209,13 @@ def render():
                         checked.add((workload["metadata"]["name"], container["name"]))
             assert {("cilium", "cilium-agent"), ("cilium-operator", "cilium-operator")} <= checked
             print(f"Verified Cilium API address in {len(checked)} agent/operator/init containers")
+            bgp_on = run("helm", "template", name, str(chart_path), "--namespace", "kube-system",
+                         "--values", str(value_path), "--set", "bgpControlPlane.enabled=true")
+            enabled_config = next(d for d in yaml.safe_load_all(bgp_on)
+                                  if d and d.get('kind') == 'ConfigMap' and d['metadata']['name'] == 'cilium-config')
+            assert enabled_config['data']['enable-bgp-control-plane'] == 'true'
+            default_config = next(d for d in objs if d.get('kind') == 'ConfigMap' and d['metadata']['name'] == 'cilium-config')
+            assert default_config['data'].get('enable-bgp-control-plane', 'false') == settings['BGP_ENABLED']
         write(ROOT / "rendered/charts" / (name + ".yaml"), objs)
         chart_objects.extend(objs)
         print(f"Rendered {name}: chart {chart['version']}")
@@ -216,7 +226,8 @@ def render():
     # CRDs embedded in the Cilium binary and the standalone Authorino distribution.
     extra_urls = ["https://github.com/fluxcd/flux2/releases/download/v2.9.5/install.yaml",
                   "https://raw.githubusercontent.com/Kuadrant/authorino/v0.26.3/install/crd/authorino.kuadrant.io_authconfigs.yaml"]
-    for version, names in {"v2": ["ciliumnetworkpolicies", "ciliumclusterwidenetworkpolicies", "ciliumloadbalancerippools"],
+    for version, names in {"v2": ["ciliumnetworkpolicies", "ciliumclusterwidenetworkpolicies", "ciliumloadbalancerippools",
+                                  "ciliumbgpclusterconfigs", "ciliumbgppeerconfigs", "ciliumbgpadvertisements"],
                            "v2alpha1": ["ciliuml2announcementpolicies"]}.items():
         extra_urls.extend(f"https://raw.githubusercontent.com/cilium/cilium/v1.20.1/pkg/k8s/apis/cilium.io/client/crds/{version}/{name}.yaml" for name in names)
     for url in extra_urls:

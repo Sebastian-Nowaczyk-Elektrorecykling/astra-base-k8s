@@ -8,3 +8,8 @@ data:
   FGA_MODEL_ID: NOT_CONFIGURED
   FGA_STORE_ID: NOT_CONFIGURED
   PUBLIC_EDGE_IP: NOT_CONFIGURED
+  # No BGP sessions or advertisements unless the optional BGP stage is added.
+  BGP_ENABLED: 'false'
+  BGP_ROUTER_IP: NOT_CONFIGURED
+  BGP_LOCAL_ASN: '64513'
+  BGP_PEER_ASN: '64512'
