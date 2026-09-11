@@ -141,7 +141,7 @@ for path in ['/admin', '/realms/master', '/', '/metrics', '/realms/elektro-other
     check(bad, 'Only Keycloak may use')
 bad = copy.deepcopy(identity)
 bad['spec']['rules'][0]['backendRefs'][0]['filters'] = [{'type': 'RequestHeaderModifier', 'requestHeaderModifier': {'set': [{'name': 'x-test', 'value': 'yes'}]}}]
-check(bad, 'Only Keycloak may use')
+check(bad, 'Route filters can change verified identity')
 public_proxy = render('examples/public-exposure/edge/resources.yaml', values)[0]
 public_proxy['spec']['provider']['kubernetes']['envoyService']['annotations']['lbipam.cilium.io/ips'] = values['EDGE_IP']
 check(public_proxy, 'Only managed EnvoyProxy resources')

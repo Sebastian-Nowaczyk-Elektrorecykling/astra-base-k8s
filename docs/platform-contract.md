@@ -40,6 +40,12 @@ namespace/RBAC boundaries and restrictions on nested reconciliation objects;
 setting a service account on a child that an unrestricted parent can rewrite is
 not isolation. See [Flux multitenancy](https://fluxcd.io/flux/installation/configuration/multitenancy/).
 
+Reserved infrastructure namespaces are `kube-system`, `kube-public`,
+`kube-node-lease`, `flux-system`, `longhorn-system`, `cnpg-system`, `cert-manager`,
+`kyverno`, `envoy-gateway-system`, `gpu-system`, `identity`, `authorization`, `edge`
+and `monitoring`. They have exceptions to application isolation for platform
+operations. Do not put application pods there to bypass a missing allowance.
+
 ## Attach once; reuse the existing Flux installation
 
 Do **not** run `flux bootstrap github` for the application repository on this

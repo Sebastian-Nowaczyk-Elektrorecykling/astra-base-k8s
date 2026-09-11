@@ -1,51 +1,40 @@
-apiVersion: kyverno.io/v1
-kind: ClusterPolicy
+apiVersion: policies.kyverno.io/v1
+kind: MutatingPolicy
 metadata:
   name: cnpg-storage-default
 spec:
-  background: false
+  failurePolicy: Fail
+  reinvocationPolicy: IfNeeded
   webhookConfiguration:
-    failurePolicy: Fail
     timeoutSeconds: 10
-  rules:
-  - name: data-storage
-    match:
-      any:
-      - resources:
-          kinds:
-          - postgresql.cnpg.io/v1/Cluster
-          operations:
-          - CREATE
-          - UPDATE
-    preconditions:
-      all:
-      - key: '{{ request.object.spec.storage.storageClass || '''' }}'
-        operator: Equals
-        value: ''
-    mutate:
-      patchStrategicMerge:
-        spec:
-          storage:
-            storageClass: longhorn-cnpg
-  - name: wal-storage
-    match:
-      any:
-      - resources:
-          kinds:
-          - postgresql.cnpg.io/v1/Cluster
-          operations:
-          - CREATE
-          - UPDATE
-    preconditions:
-      all:
-      - key: '{{ contains(keys(request.object.spec), ''walStorage'') }}'
-        operator: Equals
-        value: true
-      - key: '{{ request.object.spec.walStorage.storageClass || '''' }}'
-        operator: Equals
-        value: ''
-    mutate:
-      patchStrategicMerge:
-        spec:
-          walStorage:
-            storageClass: longhorn-cnpg
+  evaluation:
+    admission:
+      enabled: true
+    mutateExisting:
+      enabled: false
+  matchConstraints:
+    resourceRules:
+    - apiGroups:
+      - postgresql.cnpg.io
+      apiVersions:
+      - v1
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - clusters
+  mutations:
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: >-
+        has(object.spec.storage) &&
+        (!has(object.spec.storage.storageClass) || object.spec.storage.storageClass == '')
+        ? [JSONPatch{op: 'add', path: '/spec/storage/storageClass', value: 'longhorn-cnpg'}]
+        : []
+  - patchType: JSONPatch
+    jsonPatch:
+      expression: >-
+        has(object.spec.walStorage) &&
+        (!has(object.spec.walStorage.storageClass) || object.spec.walStorage.storageClass == '')
+        ? [JSONPatch{op: 'add', path: '/spec/walStorage/storageClass', value: 'longhorn-cnpg'}]
+        : []

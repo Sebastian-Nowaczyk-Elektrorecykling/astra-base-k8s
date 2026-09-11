@@ -63,11 +63,22 @@ def static():
     files = [p for folder in ("infrastructure", "clusters", "examples", "bootstrap")
              for p in (ROOT / folder).rglob("*.yaml")]
     documents = [d for p in files for d in read(p)]
+    referenced = set()
     for p in ROOT.rglob("kustomization.yaml"):
         if ".cache" in p.parts or "rendered" in p.parts:
             continue
-        for resource in read(p)[0].get("resources", []):
+        kustomization = read(p)[0]
+        for resource in kustomization.get("resources", []):
             assert (p.parent / resource).exists(), (p, resource)
+            referenced.add((p.parent / resource).resolve())
+        for patch in kustomization.get('patches', []):
+            if isinstance(patch, dict) and 'path' in patch:
+                referenced.add((p.parent / patch['path']).resolve())
+        for generator in kustomization.get('configMapGenerator', []):
+            for filename in generator.get('files', []):
+                referenced.add((p.parent / filename.split('=', 1)[-1]).resolve())
+    for p in (ROOT / 'infrastructure').rglob('*.yaml'):
+        assert p.name == 'kustomization.yaml' or p.resolve() in referenced, f'Unreferenced infrastructure file: {p}'
     flux_base = ROOT / "clusters/laptops/flux-system"
     assert {"gotk-components.yaml", "gotk-sync.yaml"}.issubset(
         read(flux_base / "kustomization.yaml")[0]["resources"]), "Flux bootstrap must include controllers and sync resources"

@@ -6,6 +6,8 @@ are trusted shell input; never source files supplied by an untrusted application
 Paths below are relative to this repository's root. The [bootstrap runbook](bootstrap.md)
 provides the ordered installation, and [node maintenance](node-role-changes.md)
 provides the data-safety procedure. Internal `scripts/lib/` files are not entrypoints.
+`scripts/validate-cluster.py` is the internal validator called by the configuration
+commands; it reads merged settings as JSON on stdin and contacts no cluster.
 
 | Script | Where / inputs | Effects and limits |
 | --- | --- | --- |

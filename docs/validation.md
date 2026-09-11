@@ -2,13 +2,15 @@
 
 ## Automated checks
 
-`python3 tests/render.py` parses repository YAML with duplicate-key rejection and checks dependency cycles, referenced paths, release pins and key storage/authentication invariants. `bash -n` and ShellCheck check the workstation/host scripts.
+`python3 tests/render.py` parses repository YAML with duplicate-key rejection and checks dependency cycles, referenced paths, unused infrastructure YAML, release pins and key storage/authentication invariants. `bash -n` and ShellCheck check the workstation/host scripts.
 
 `python3 tests/contracts.py` checks local documentation links/headings, administration-script coverage and the downstream contract. With `--render`, it copies the starter into an independent temporary repository and builds its workload/route stages for `laptops` and `factory`, verifying paths, dependencies, substitutions and object ownership without access to base files. Disposable-cluster CI strictly validates its Flux/route/network resources and starts the actual diagnostic image under the declared restricted security settings. This verifies the example workload, not a complete Flux/browser-login deployment of an unseen application.
 
 The GitHub Actions workflow also pulls and lints the actual pinned Helm charts, including the optional Barman plugin, runs Kustomize, and loads upstream CRDs into a disposable Kubernetes 1.36 kind cluster. It installs the real Kyverno webhook there, performs strict server-side dry runs (including backup examples), confirms CNPG's default class mutation and rejects alternate NodePort/native-route/security-policy paths. Optional bucket/provider inputs remain explicit placeholders; schema validation cannot establish backup connectivity or recovery. CI uses no deployment secrets and does not contact your laptops. Look at the workflow result for the exact commit, rather than assuming a checked-in workflow has passed.
 
 The same disposable cluster starts the actual pinned Authorino image using this repository's Deployment, ServiceAccount and RBAC. CI waits for the readiness probe and checks that the process runs as UID 1000. This catches runtime user/entrypoint errors that server-side dry runs cannot detect. It does not exercise the full identity/OpenFGA request path.
+
+The CNPG defaulting tests use the actual Kyverno MutatingPolicy webhook: omitted, empty and null data/WAL classes receive the default, while explicit classes are preserved. CI also stops the webhook in the disposable cluster and verifies CNPG admission fails closed, then restores it before the remaining checks.
 
 Separate fresh Debian 12 and 13 amd64 containers run the actual `prepare-workstation.sh` installer. They check installed CLI versions, perform an age/SOPS encryption/decryption round trip, and build the Flux manifests twice: once with generated controllers and an empty sync placeholder, then with generated GitRepository/Kustomization objects. These regress the reported empty-bootstrap failure without using a GitHub token or contacting a Kubernetes cluster. The installer also supports the upstream arm64 binaries; these CI jobs exercise amd64.
 

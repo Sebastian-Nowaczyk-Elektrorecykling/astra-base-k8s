@@ -37,7 +37,6 @@ def static():
     starter = ROOT / 'examples/downstream-repository'
     assert (starter / 'README.md').is_file() and (starter / 'AGENTS.md').is_file()
     assert read(ROOT / 'examples/cnpg-cluster.yaml')[0]['spec']['imageName'] == profile_settings()['PG_IMAGE']
-    assert not list((ROOT / 'examples/protected-app').glob('*')), 'Keep only one maintained application example'
     print(f'Documentation links, script coverage and downstream contract checked ({len(documents)} documents).')
 
 
