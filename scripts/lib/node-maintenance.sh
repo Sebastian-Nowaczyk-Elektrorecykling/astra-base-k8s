@@ -4,6 +4,8 @@ fail() { echo "ERROR: $*" >&2; exit 1; }
 kube() { kubectl --request-timeout=30s "$@"; }
 ready_filter='any(.status.conditions[]?; .type == "Ready" and .status == "True")'
 
+# The entrypoint scripts consume desired_role, apply and resume after this parser returns.
+# shellcheck disable=SC2034
 maintenance_args() {
   node='' ssh_target='' apply=false delete_emptydir=false timeout=1800 resume='' desired_role=''
   while (($#)); do
@@ -34,7 +36,7 @@ remote() {
   done
   ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
     "$ssh_target" "if [ \"\$(id -u)\" -eq 0 ]; then exec bash -s -- '$operation' '$node' '$machine_id' '${backup_id:-$node_uid}' '$role' '$K3S_VERSION'; else exec sudo -n bash -s -- '$operation' '$node' '$machine_id' '${backup_id:-$node_uid}' '$role' '$K3S_VERSION'; fi" \
-    <"$repo/scripts/lib/node-host.sh"
+    <"${repo:?Caller must set repo}/scripts/lib/node-host.sh"
 }
 
 load_node() {
