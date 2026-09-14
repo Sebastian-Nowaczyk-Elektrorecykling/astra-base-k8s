@@ -90,7 +90,14 @@ mkdir -p local
 bash scripts/configure-cluster.sh --export laptops > local/cluster.env
 ```
 
-Copy that file to each prepared node. Initialize exactly one new hybrid:
+Copy that file to each prepared node.
+
+For GPU workers/hybrids, restore the host driver and toolkit **before** their first
+`install-k3s.sh` invocation, following [GPU preparation](gpu.md#fresh-nvidia-node-prepare-before-joining).
+Complete driver reboots now; label the registered node and enable the plugin
+after the base stages are ready.
+
+Initialize exactly one new hybrid:
 
 ```sh
 # On freshly prepared k8s1, after the preparation reboot:
@@ -134,5 +141,6 @@ dig @192.168.2.242 grafana.admin.internal +short
 Verify the node answer is its current LAN IP and Grafana resolves to `.240`.
 Complete [DNS checks](dns.md), [access checks](validation.md) and a disposable
 PVC/database test before keeping data. Point clients/DHCP back at `.242` only
-after the resolver works. Restore GPU preparation on the intended GPU node.
+after the resolver works. Verify the GPU node's plugin/capacity and
+run its [GPU smoke test](gpu.md#enable-the-device-plugin-and-verify-the-joined-node).
 Enable [BGP](bgp.md) later if needed; it is not a prerequisite for this rebuild.

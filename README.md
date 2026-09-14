@@ -43,6 +43,11 @@ sudo bash scripts/install-k3s.sh --role hybrid --name k8s1 --ip 192.168.2.153 \
 
 Continue with the runbook; this command alone does not install the platform. Supply secrets and reserve a small LAN pool for service IPs before deployment. Keep the controller/API address stable; workers can use DHCP with `--ip auto` (the default). The existing cluster retains `.internal`; another profile can use a suffix such as `production.internal`.
 
+For a GPU worker/hybrid, [install and verify its driver and NVIDIA toolkit before
+joining](docs/gpu.md#fresh-nvidia-node-prepare-before-joining). Complete driver
+reboots before k3s installation so initial GPU enablement needs no later drain
+or runtime restart.
+
 ## DNS and exposure
 
 | Purpose | Name examples | Destination |

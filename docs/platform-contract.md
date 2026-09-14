@@ -285,7 +285,11 @@ accepts DNS-label names up to 63 characters; workers may use DHCP. Stable server
 addresses are an etcd/API prerequisite. Neither node count nor controller HA
 implies application, storage, gateway or identity HA.
 
-No inference server is installed. NVIDIA is optional: after driver/toolkit/device
+No inference server is installed. Prepare a new GPU worker/hybrid's host driver
+and container toolkit [before its first k3s join](gpu.md#fresh-nvidia-node-prepare-before-joining),
+including required driver reboots. k3s discovers the runtime at first startup;
+the node label and device plugin can follow without draining/restarting it.
+NVIDIA is optional: after driver/toolkit/device
 plugin preparation, request `nvidia.com/gpu`, select the intended GPU labels and
 use RuntimeClass `nvidia` where required. Other vendors need their own supported
 plugin/runtime. Check allocatable resources and run [the GPU smoke job](../examples/gpu-smoke.yaml);

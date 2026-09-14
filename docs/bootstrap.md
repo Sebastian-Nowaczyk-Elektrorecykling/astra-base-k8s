@@ -57,7 +57,15 @@ sudo bash scripts/prepare-debian.sh --disable-sleep
 sudo reboot
 ```
 
-After reconnecting, initialize **exactly one** server:
+**Before running `install-k3s.sh` on a GPU worker or hybrid**, complete
+[GPU host preparation](gpu.md#fresh-nvidia-node-prepare-before-joining): install
+the supported driver, reboot and verify `nvidia-smi`, then run
+`sudo bash scripts/prepare-nvidia.sh`. k3s detects that runtime on its first
+startup. This avoids a later drain/restart solely for initial GPU enablement;
+the node label and device plugin are added after joining as described there.
+Skip NVIDIA preparation on ordinary nodes and dedicated controllers.
+
+After reconnecting and completing any GPU preparation, initialize **exactly one** server:
 
 ```sh
 sudo bash scripts/install-k3s.sh --role hybrid --name k8s1 --ip 192.168.2.153 \
