@@ -120,6 +120,8 @@ unset GITHUB_TOKEN
 git pull --ff-only
 ```
 
+`generate-secrets.sh` creates the profile's `secrets/` directory and `secrets/kustomization.yaml` if missing, including after clearing old cluster secrets. No manual placeholder is needed. Existing Kustomize resources and options are preserved; an existing `bootstrap.sops.yaml` is never overwritten. For another profile, pass its name as the second argument: `bash scripts/generate-secrets.sh age1YOUR_PUBLIC_RECIPIENT office`.
+
 The GitHub token bootstraps Flux's read-only SSH deploy key; the token is not stored in the cluster. Back up the age private key offline. `sops-age` must be restored before Flux can recover encrypted resources. The cluster's `.sops.yaml` can be added with your public recipient if you want convenient `sops` edits. Never commit decrypted copies.
 
 Before making cluster changes, `bootstrap-flux.sh` verifies that bootstrap values agree with the selected profile, that kubeconfig points at its API, and that the profile and shared infrastructure match `origin/main`. This prevents Flux from replacing the working Cilium API address with an old Git value or bootstrapping the wrong selected cluster. If your local config has a different path, pass it as the second argument: `bash scripts/bootstrap-flux.sh local/age.agekey /path/to/cluster.env`.

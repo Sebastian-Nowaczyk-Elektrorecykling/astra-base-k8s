@@ -12,10 +12,27 @@ target="$cluster_dir/secrets/bootstrap.sops.yaml"
 umask 077
 install -d -m 0700 "$repo/local"
 tmp=$(mktemp -d "$repo/local/secrets.XXXXXX")
+encrypted=''
+kustomization=''
+trap 'rm -rf -- "$tmp"; rm -f -- "$encrypted" "$kustomization"' EXIT
 mkdir -p "$cluster_dir/secrets"
 encrypted=$(mktemp "$cluster_dir/secrets/.encrypted.XXXXXX")
 kustomization=$(mktemp "$cluster_dir/secrets/.kustomization.XXXXXX")
-trap 'rm -rf -- "$tmp"; rm -f -- "$encrypted" "$kustomization"' EXIT
+# A cleared or newly checked-out profile may have no secrets directory or resource list.
+# Stage the resource list so a failed generation does not publish partial configuration.
+if [[ -e $cluster_dir/secrets/kustomization.yaml ]]; then
+  cp -- "$cluster_dir/secrets/kustomization.yaml" "$tmp/kustomization.yaml"
+else
+  cat >"$tmp/kustomization.yaml" <<'EOF'
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+EOF
+fi
+# Retain other encrypted resources and Kustomize options in this profile.
+patch=$(kubectl patch --local --type=merge --patch '{}' -f "$tmp/kustomization.yaml" -o json \
+  | jq '{resources: ((.resources // []) + ["bootstrap.sops.yaml"] | unique)}')
+kubectl patch --local --type=merge --patch "$patch" -f "$tmp/kustomization.yaml" -o yaml >"$kustomization"
 openssl rand -hex 32 >"$tmp/oidc"
 openssl rand -hex 32 >"$tmp/fga"
 openssl rand -hex 24 >"$tmp/admin"
@@ -34,10 +51,6 @@ for f in oidc fga admin; do tr -d '\n' <"$tmp/$f" >"$tmp/$f.raw"; done
 sed -i '/^  name: openfga-key$/a\  labels:\n    authorino.kuadrant.io/managed-by: authorino' "$tmp/bundle.yaml"
 sops --encrypt --age "$1" --encrypted-regex '^(data|stringData)$' "$tmp/bundle.yaml" >"$encrypted"
 [[ -s $encrypted ]] || { echo 'Encryption produced no output; no secrets were installed.' >&2; exit 1; }
-# Retain other encrypted resources and Kustomize options in this profile.
-patch=$(kubectl patch --local --type=merge --patch '{}' -f "$cluster_dir/secrets/kustomization.yaml" -o json \
-  | jq '{resources: ((.resources // []) + ["bootstrap.sops.yaml"] | unique)}')
-kubectl patch --local --type=merge --patch "$patch" -f "$cluster_dir/secrets/kustomization.yaml" -o yaml >"$kustomization"
 # Publish only complete ciphertext, atomically and without overwriting a concurrent run.
 ln -- "$encrypted" "$target"
 mv -- "$kustomization" "$cluster_dir/secrets/kustomization.yaml"
