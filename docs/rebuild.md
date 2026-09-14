@@ -71,8 +71,10 @@ In `clusters/laptops/settings.yaml`:
   inherit `NOT_CONFIGURED` from the base. The empty OpenFGA database will generate
   new IDs even if a credential happened to be reused.
 - For the first clean test, leave BGP disabled and optional public/API-VIP stages
-  out of the profile. Use the initial controller IP as `API_HOST`. Do not erase
-  shared infrastructure or generated `gotk-components.yaml`/`gotk-sync.yaml`.
+  out of the profile. Use the initial controller IP as `API_HOST`. Preserve shared
+  infrastructure and any Flux customizations. Existing generated manifests can be
+  reused. If `flux-system/` was cleared completely, bootstrap regenerates it;
+  an incomplete customization must be repaired before retrying.
 
 The encrypted secret file is regenerated in bootstrap part 4 below. Until then,
 the old secrets kustomization temporarily references the removed file; **do not
@@ -114,7 +116,9 @@ The [HA guide](high-availability.md) covers the eventual stable API VIP and quor
 Continue the runbook with the **new** kubeconfig, Cilium, a new age key and newly
 generated encrypted secrets. Commit/push the completed profile before Flux
 bootstrap. Keep the age key offline. Flux bootstrap can reuse the repository and
-its generated sync manifests; it creates the new cluster's credentials. If GitHub
+its generated sync manifests, or generate them when `flux-system/` is absent or
+empty; it creates the new cluster's credentials. Pull the generated commits after
+bootstrap. If GitHub
 reports that an old deploy key conflicts, remove **only the retired laptops key**
 in the repository's Deploy keys settings, identified by its saved old public key,
 and rerun bootstrap. Do not remove another cluster's deploy key.

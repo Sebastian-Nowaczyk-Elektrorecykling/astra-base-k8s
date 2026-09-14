@@ -59,6 +59,10 @@ def configured(path, settings):
     return [d for d in yaml.load_all(text, Loader=UniqueLoader) if d is not None]
 
 
+def fresh_flux_directory(path):
+    return not path.exists() or (path.is_dir() and not any(path.iterdir()))
+
+
 def static():
     files = [p for folder in ("infrastructure", "clusters", "examples", "bootstrap")
              for p in (ROOT / folder).rglob("*.yaml")]
@@ -69,6 +73,11 @@ def static():
             continue
         kustomization = read(p)[0]
         for resource in kustomization.get("resources", []):
+            # Flux creates this generated entry point during first bootstrap.
+            # Only an absent/empty directory at a real profile root is optional.
+            if (p.parent.parent == ROOT / "clusters" and (p.parent / "settings.yaml").is_file()
+                    and resource == "flux-system" and fresh_flux_directory(p.parent / resource)):
+                continue
             assert (p.parent / resource).exists(), (p, resource)
             referenced.add((p.parent / resource).resolve())
         for patch in kustomization.get('patches', []):
@@ -79,10 +88,13 @@ def static():
                 referenced.add((p.parent / filename.split('=', 1)[-1]).resolve())
     for p in (ROOT / 'infrastructure').rglob('*.yaml'):
         assert p.name == 'kustomization.yaml' or p.resolve() in referenced, f'Unreferenced infrastructure file: {p}'
-    flux_base = ROOT / "clusters/laptops/flux-system"
-    assert {"gotk-components.yaml", "gotk-sync.yaml"}.issubset(
-        read(flux_base / "kustomization.yaml")[0]["resources"]), "Flux bootstrap must include controllers and sync resources"
-    assert any(d.get("kind") == "Deployment" for d in read(flux_base / "gotk-components.yaml"))
+    for settings_file in (ROOT / "clusters").glob("*/settings.yaml"):
+        flux_base = settings_file.parent / "flux-system"
+        if fresh_flux_directory(flux_base):
+            continue
+        assert {"gotk-components.yaml", "gotk-sync.yaml"}.issubset(
+            read(flux_base / "kustomization.yaml")[0]["resources"]), "Flux bootstrap must include controllers and sync resources"
+        assert any(d.get("kind") == "Deployment" for d in read(flux_base / "gotk-components.yaml"))
     phases = read(ROOT / "clusters/base/reconciliation.yaml")
     by_name = {p["metadata"]["name"]: p for p in phases}
     def visit(name, trail):

@@ -10,7 +10,7 @@
 | `clusters/NAME/settings.yaml` | That cluster's name, network and private DNS suffix |
 | `clusters/NAME/dns-forwarding.yaml` | Optional forwarding to other clusters and non-Kubernetes LAN host entries |
 | `clusters/NAME/secrets/` | That cluster's encrypted bootstrap credentials |
-| `clusters/NAME/flux-system/` | Flux's generated controllers/sync entry point for that cluster |
+| `clusters/NAME/flux-system/` | Flux's generated controllers/sync entry point; an absent/empty directory is generated during bootstrap |
 | `local/NAME/` | Ignored local kubeconfig, age key, exported env file and operation state |
 
 The settings file is a Kustomize patch over the shared defaults. Flux sees one merged `flux-system/cluster-settings` ConfigMap. The profile's `CLUSTER_NAME` selects its own secrets directory through a Kustomize replacement. Shared resource names stay the same inside each independent Kubernetes API; they do not need per-cluster prefixes.

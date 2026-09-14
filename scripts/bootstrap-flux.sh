@@ -28,13 +28,24 @@ if ! git -C "$repo" diff --quiet HEAD origin/main -- "$cluster_path" clusters/ba
   echo 'Local cluster configuration differs from origin/main. Push your commits or pull the remote changes before bootstrap.' >&2
   exit 1
 fi
-# Flux applies an existing Kustomization before generating gotk-sync.yaml.
-# Validate the checked-in component references locally before changing the cluster.
-if ! kubectl kustomize "$cluster_dir/flux-system" | \
-  awk '/^kind: Deployment$/ {found=1} END {exit !found}'; then
-  echo 'Flux component Kustomization must build controller Deployments.' >&2
-  echo 'gotk-components.yaml and gotk-sync.yaml must both be referenced.' >&2
-  exit 1
+# On a fresh profile Flux generates components, installs them directly, then
+# generates the sync objects and Kustomization in its own Git checkout.
+flux_dir="$cluster_dir/flux-system"
+if [[ ! -e $flux_dir ]] || [[ -d $flux_dir && -z $(find "$flux_dir" -mindepth 1 -print -quit) ]]; then
+  echo "No Flux manifests yet; Flux will generate and commit $cluster_path/flux-system during bootstrap."
+else
+  # Existing customizations are applied before gotk-sync.yaml is regenerated.
+  # Reject incomplete/empty customizations rather than hiding them with defaults.
+  if ! kubectl patch --local --type=merge --patch '{}' -f "$flux_dir/kustomization.yaml" -o json | \
+    jq -e '(.resources // []) | contains(["gotk-components.yaml", "gotk-sync.yaml"])' >/dev/null; then
+    echo 'Existing Flux Kustomization must reference gotk-components.yaml and gotk-sync.yaml.' >&2
+    exit 1
+  fi
+  if ! kubectl kustomize "$flux_dir" | \
+    awk '/^kind: Deployment$/ {found=1} END {exit !found}'; then
+    echo 'Existing Flux Kustomization must build controller Deployments. Restore its missing files or fix its customization.' >&2
+    exit 1
+  fi
 fi
 origin=$(git -C "$repo" remote get-url origin)
 [[ $origin =~ ^(https://github.com/|git@github.com:)([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$ ]] || {
