@@ -12,6 +12,7 @@ target="$cluster_dir/secrets/bootstrap.sops.yaml"
 umask 077
 install -d -m 0700 "$repo/local"
 tmp=$(mktemp -d "$repo/local/secrets.XXXXXX")
+mkdir -p "$cluster_dir/secrets"
 encrypted=$(mktemp "$cluster_dir/secrets/.encrypted.XXXXXX")
 kustomization=$(mktemp "$cluster_dir/secrets/.kustomization.XXXXXX")
 trap 'rm -rf -- "$tmp"; rm -f -- "$encrypted" "$kustomization"' EXIT
