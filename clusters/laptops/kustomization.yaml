@@ -4,6 +4,7 @@ resources:
 - ../base
 - flux-system
 - dns-forwarding.yaml
+- nvidia.yaml
 patches:
 - path: settings.yaml
 replacements:
