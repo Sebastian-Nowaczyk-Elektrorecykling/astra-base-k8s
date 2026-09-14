@@ -30,6 +30,10 @@ def validate(data):
     assert 0 < lan.prefixlen <= 30 and not lan.is_multicast, 'LAN_CIDR must be a usable IPv4 LAN subnet'
     clients = ipaddress.IPv4Network(data['DNS_CLIENT_CIDR'])
     assert clients.prefixlen > 0 and not clients.is_multicast, 'DNS_CLIENT_CIDR must restrict access to your LAN/VPN'
+    lb = ipaddress.IPv4Network(data['LB_CIDR'])
+    private_ranges = [ipaddress.IPv4Network(cidr) for cidr in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')]
+    assert lb.prefixlen <= 30 and any(lb.subnet_of(net) for net in private_ranges), 'LB_CIDR must be a usable RFC1918 service subnet'
+    assert all(not lb.overlaps(net) for net in (lan, clients, pod, service)), 'LB_CIDR must not overlap node/client LANs or Pod/Service ranges; on-link clients would ARP instead of using BGP'
     assert not pod.overlaps(service), 'Pod and Service networks overlap'
     assert not pod.overlaps(lan) and not service.overlaps(lan), 'Cluster address ranges overlap LAN_CIDR'
     assert not pod.overlaps(clients) and not service.overlaps(clients), 'Cluster address ranges overlap the client LAN/VPN'
@@ -37,22 +41,22 @@ def validate(data):
     assert cluster_dns in service and cluster_dns not in [service.network_address, service.broadcast_address], 'CLUSTER_DNS must be a usable address in SERVICE_CIDR'
     start, stop = address('LB_START'), address('LB_STOP')
     assert start <= stop, 'LB_START must not exceed LB_STOP'
-    assert lan.network_address < start <= stop < lan.broadcast_address, 'The entire L2 service pool must be inside LAN_CIDR, excluding network/broadcast addresses'
+    assert lb.network_address < start <= stop < lb.broadcast_address, 'The entire service pool must be inside LB_CIDR, excluding network/broadcast addresses'
     try:
         api = address('API_HOST')
     except ipaddress.AddressValueError:
         assert not re.fullmatch(r'[0-9.]+', data['API_HOST']), 'API_HOST resembles an invalid IPv4 address'
         api = None  # A stable API DNS name is also supported; no DNS lookup during local validation.
     if api is not None:
-        assert not start <= api <= stop, 'The API address must be outside the entire Cilium service pool'
+        assert api not in lb, 'The API address must be outside the routed Cilium service subnet'
         assert api not in pod and api not in service, 'API_HOST cannot use a Pod/Service address'
     vips = [address('DNS_IP'), address('EDGE_IP')]
     if data['PUBLIC_EDGE_IP'] != 'NOT_CONFIGURED':
         vips.append(address('PUBLIC_EDGE_IP'))
     assert len(set(vips)) == len(vips), 'DNS and gateway IPs must be distinct'
     for ip in vips:
-        assert start <= ip <= stop, 'DNS/gateway LAN addresses must be inside LB_START..LB_STOP'
-        assert ip not in pod and ip not in service, 'LAN virtual IPs cannot use Pod/Service addresses'
+        assert start <= ip <= stop, 'DNS/gateway virtual addresses must be inside LB_START..LB_STOP'
+        assert ip not in pod and ip not in service, 'Virtual IPs cannot use Pod/Service addresses'
         assert str(ip) != data['API_HOST'], 'API_HOST must not share a DNS/gateway service IP'
     if 'API_VIP' in data:
         api_vip = address('API_VIP')
@@ -67,16 +71,13 @@ def validate(data):
         assert not (ip.is_loopback or ip.is_unspecified or ip.is_multicast), 'Use reachable upstream DNS IPs'
         assert ip not in vips and ip not in service, 'DNS must not forward back to itself or cluster DNS'
         assert len(parts) == 1 or (len(parts) == 2 and 0 < int(parts[1]) < 65536), 'Invalid upstream DNS port'
-    assert data['LAN_INTERFACE_REGEX'], 'Set LAN_INTERFACE_REGEX to the wired interfaces used for announcements'
-    assert data['BGP_ENABLED'] in ('true', 'false'), 'BGP_ENABLED must be the string true or false'
-    if data['BGP_ENABLED'] == 'true':
-        router = address('BGP_ROUTER_IP')
-        assert lan.network_address < router < lan.broadcast_address, 'The BGP router must be on the directly connected LAN'
-        assert not start <= router <= stop, 'The BGP router must be outside the service pool'
-        assert router != api, 'The BGP router and API endpoint must differ'
-        local_asn, peer_asn = int(data['BGP_LOCAL_ASN']), int(data['BGP_PEER_ASN'])
-        assert all(64512 <= asn <= 65534 for asn in (local_asn, peer_asn)), 'Use private 16-bit ASNs for this EdgeOS eBGP configuration'
-        assert local_asn != peer_asn, 'eBGP requires different cluster and router ASNs'
+    assert data.get('BGP_ENABLED', 'true') == 'true', 'BGP is required; remove the retired BGP_ENABLED setting'
+    router = address('BGP_ROUTER_IP')
+    assert lan.network_address < router < lan.broadcast_address, 'The BGP router must be on the directly connected LAN'
+    assert router != api, 'The BGP router and API endpoint must differ'
+    local_asn, peer_asn = int(data['BGP_LOCAL_ASN']), int(data['BGP_PEER_ASN'])
+    assert all(64512 <= asn <= 65534 for asn in (local_asn, peer_asn)), 'Use private 16-bit ASNs for this EdgeOS eBGP configuration'
+    assert local_asn != peer_asn, 'eBGP requires different cluster and router ASNs'
 
 
 if __name__ == '__main__':

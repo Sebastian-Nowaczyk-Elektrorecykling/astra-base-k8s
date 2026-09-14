@@ -117,7 +117,7 @@ On the Debian workstation, a direct TLS verification that also checks SNI and
 hostname is:
 
 ```sh
-openssl s_client -connect 192.168.2.240:443 -servername grafana.admin.internal \
+openssl s_client -connect 10.44.0.240:443 -servername grafana.admin.internal \
   -CAfile local/platform-ca.crt -verify_hostname grafana.admin.internal \
   -verify_return_error </dev/null
 ```

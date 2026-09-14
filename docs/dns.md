@@ -8,14 +8,14 @@ Edit the tracked `clusters/laptops/settings.yaml`, retaining your actual API and
 
 ```yaml
   LAN_CIDR: 192.168.2.0/24
-  EDGE_IP: 192.168.2.240
-  DNS_IP: 192.168.2.242
+  EDGE_IP: 10.44.0.240
+  DNS_IP: 10.44.0.242
   DNS_CLIENT_CIDR: 192.168.2.0/24
   DNS_UPSTREAMS: '1.1.1.1 9.9.9.9'
   INTERNAL_DOMAIN: internal
 ```
 
-These are **examples**, not discovered LAN addresses. Reserve `DNS_IP` outside DHCP and inside your existing `LB_START`–`LB_STOP` pool, distinct from `EDGE_IP`, any public gateway, API VIP and physical machine. `DNS_CLIENT_CIDR` is the IPv4 subnet allowed to query the resolver; set it to your real LAN. Cilium's LoadBalancer source filtering and a pod ingress policy enforce this boundary. Do not forward TCP/UDP 53 from the Internet. To admit a separate routed VPN subnet, extend the Service source ranges, DNS network policy and the corresponding admission validation together through Git.
+These are **examples**, not discovered LAN addresses. Choose `DNS_IP` inside your off-link `LB_CIDR` and `LB_START`–`LB_STOP` pool, distinct from `EDGE_IP`, any public gateway, API VIP and physical machine. `DNS_CLIENT_CIDR` is the IPv4 subnet allowed to query the resolver; set it to your real LAN. Cilium's LoadBalancer source filtering and a pod ingress policy enforce this boundary. Do not forward TCP/UDP 53 from the Internet. To admit a separate routed VPN subnet, extend the Service source ranges, DNS network policy and the corresponding admission validation together through Git.
 
 `DNS_UPSTREAMS` is a space-separated list of **IPv4 resolver addresses**, optionally `IP:port`, in preference order. You can use your router or company DNS instead of the example public resolvers, provided it does not forward these same queries back to `DNS_IP`. Do not use `DNS_IP`, kube-dns, loopback addresses or `/etc/resolv.conf` as upstreams. CoreDNS forwards to these explicit addresses; it does not inherit a client's DNS or recursively forward through itself. It tries another upstream on transport failure; configure resolvers with consistent answers, since an upstream NXDOMAIN is an answer, not a failover signal.
 
@@ -31,6 +31,7 @@ flux reconcile kustomization flux-system
 flux reconcile kustomization foundation
 flux reconcile kustomization admission
 flux reconcile kustomization network
+flux reconcile kustomization bgp
 flux reconcile kustomization dns
 flux reconcile kustomization cluster-dns
 kubectl -n kube-system rollout status deployment/lan-dns --timeout=5m
@@ -45,7 +46,7 @@ The normal Flux dependency graph performs this ordering automatically. Existing 
 For company workstations, the least disruptive option is to retain the router as
 their existing DHCP-provided DNS server and forward only the cluster suffix to
 CoreDNS. Public DNS then continues working while the cluster is stopped or wiped.
-This works with BGP off or on and needs no per-application records. It uses
+The router must have an established BGP route to the off-link `DNS_IP`; no per-application records are needed. It uses
 EdgeOS's existing dnsmasq service, not another installed DNS server.
 
 First verify `DNS_IP` directly. In the EdgeRouter CLI, inspect `show configuration commands`
@@ -55,7 +56,7 @@ the only new forwarding setting is (adapt the profile's suffix and address):
 
 ```text
 configure
-set service dns forwarding options server=/internal/192.168.2.242
+set service dns forwarding options server=/internal/10.44.0.242
 compare
 commit
 save
@@ -99,7 +100,7 @@ zone back to the cluster and resolve other names independently.
 
 Test `dig @ROUTER_IP grafana.admin.internal`, a real node name and `example.org`,
 then test the workstation's normal resolver. To undo, remove only the exact
-option you added with `delete service dns forwarding options server=/internal/192.168.2.242`
+option you added with `delete service dns forwarding options server=/internal/10.44.0.242`
 in a configuration session, review/commit/save, and remove its rebind exception
 only if you added it and no remaining cluster needs it.
 
@@ -119,12 +120,12 @@ The application wildcards currently provide IPv4 A records. An AAAA/TXT/HTTPS qu
 `prepare-workstation.sh` installs `dig` through Debian's `dnsutils` package. Test both transports (replace the example address):
 
 ```sh
-dig @192.168.2.242 k8s1.hosts.internal A
-dig @192.168.2.242 foo-a7c92e.test.internal A
-dig @192.168.2.242 foo-b41d08.test.internal A +tcp
-dig @192.168.2.242 missing.hosts.internal A
-dig @192.168.2.242 longhorn.admin.internal AAAA
-dig @192.168.2.242 example.org A
+dig @10.44.0.242 k8s1.hosts.internal A
+dig @10.44.0.242 foo-a7c92e.test.internal A
+dig @10.44.0.242 foo-b41d08.test.internal A +tcp
+dig @10.44.0.242 missing.hosts.internal A
+dig @10.44.0.242 longhorn.admin.internal AAAA
+dig @10.44.0.242 example.org A
 ```
 
 On a Debian desktop using NetworkManager, select your connection under network settings, disable automatic DNS and enter `DNS_IP`. A CLI equivalent is:
@@ -133,7 +134,7 @@ On a Debian desktop using NetworkManager, select your connection under network s
 nmcli connection show
 # Replace the connection name and example IP below.
 sudo nmcli connection modify 'Wired connection 1' \
-  ipv4.ignore-auto-dns yes ipv4.dns '192.168.2.242' ipv6.ignore-auto-dns yes
+  ipv4.ignore-auto-dns yes ipv4.dns '10.44.0.242' ipv6.ignore-auto-dns yes
 sudo nmcli connection up 'Wired connection 1'
 getent ahostsv4 longhorn.admin.internal
 ```
@@ -148,7 +149,7 @@ The `cluster-dns` reconciliation supplies the **supported k3s `coredns-custom` i
 
 CoreDNS reloads the Corefile, zone files, optional forwarding imports and node records automatically after ConfigMap projection reaches the pods. The pinned `file` plugin uses `reload_by_mtime`, so editing addresses needs no manual SOA serial increment or pod restart. Allow a few minutes for reconciliation, volume projection and cached answers; the internal cache is capped at 30 seconds. An invalid configuration is logged and does not become a valid DNS change. Check `kubectl -n kube-system logs deployment/lan-dns` and query the actual answer after editing.
 
-Two small replicas prefer different workload-capable nodes and a PDB retains one during voluntary maintenance. Both may run on a single eligible node, which provides no node-failure redundancy. Cilium announces the stable IP from one node at a time and can move it after a node failure. Test that failover on your LAN; CI does not test your switches, ARP or firewall.
+Two small replicas prefer different workload-capable nodes and a PDB retains one during voluntary maintenance. Both may run on a single eligible node, which provides no node-failure redundancy. Cilium advertises the stable IP from the controller peers; the router selects a next hop and withdraws failed paths. There is no L2 fallback. Test that failover on your LAN; CI does not test your router sessions or firewall.
 
 Client DNS depends on cluster availability. **Keep cluster hosts' bootstrap/public DNS independent of the cluster**, and retain a numeric node/API VIP address for API recovery. Otherwise a full shutdown can create a dependency cycle while k3s/Cilium/Flux need DNS to recover. You can leave nodes on an external LAN resolver which conditionally forwards only `.internal` here; keep its other upstream independent. Pods receive the internal-zone import regardless of the nodes' resolver choice. For a first bootstrap, retain working external DNS until Flux has brought up this service.
 

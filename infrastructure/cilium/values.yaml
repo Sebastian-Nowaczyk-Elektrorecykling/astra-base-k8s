@@ -1,15 +1,22 @@
 kubeProxyReplacement: true
+# Apply GitOps networking configuration changes without a manual pod restart.
+rollOutCiliumPods: true
 ipam:
   mode: kubernetes
 k8sServicePort: 6443
 routingMode: tunnel
 tunnelProtocol: vxlan
-# Keep return traffic through the receiving load-balancer node in both L2/BGP modes.
+# Keep replies through the controller that received the routed service traffic.
 loadBalancer:
   mode: snat
 operator:
   replicas: 1
+  rollOutPods: true
 l2announcements:
+  enabled: false
+l2podAnnouncements:
+  enabled: false
+bgpControlPlane:
   enabled: true
 k8sClientRateLimit:
   qps: 40

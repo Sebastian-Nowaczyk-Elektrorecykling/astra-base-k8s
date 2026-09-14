@@ -24,10 +24,9 @@ if [[ -n $(kubectl get crd helmreleases.helm.toolkit.fluxcd.io --ignore-not-foun
 fi
 helm repo add cilium https://helm.cilium.io/ --force-update
 helm repo update cilium
-bgp_enabled=$(cluster_settings_json | jq -er '.data.BGP_ENABLED')
 # Same release name, namespace, values and pin as Flux: Flux takes over this release.
 helm upgrade --install cilium cilium/cilium --version "$CILIUM_VERSION" \
   --namespace kube-system --values "$repo/infrastructure/cilium/values.yaml" \
   --set-string "k8sServiceHost=$API_HOST" --set k8sServicePort=6443 \
-  --set "bgpControlPlane.enabled=$bgp_enabled" --wait --timeout 10m
+  --wait --timeout 10m
 kubectl wait --for=condition=Ready nodes --all --timeout=10m

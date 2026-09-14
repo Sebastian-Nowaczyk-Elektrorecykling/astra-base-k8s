@@ -5,7 +5,7 @@ A reusable GitOps base for Debian clusters. The `laptops` profile starts with `k
 | Layer | Choice | Behavior |
 | --- | --- | --- |
 | Kubernetes | k3s, embedded etcd | One server initially; add two servers for quorum HA |
-| Network | Cilium | CNI, kube-proxy replacement, policies, WireGuard, LAN load-balancer IP allocation and L2 announcements, Hubble relay |
+| Network | Cilium | CNI, kube-proxy replacement, policies, WireGuard, routed service IP allocation and BGP to the node LAN router, Hubble relay |
 | LAN DNS | CoreDNS | Dynamic k3s node records, application wildcards and configurable upstream forwarding on a stable Cilium IP |
 | GitOps | Flux | Helm's normal lifecycle, explicit dependency stages, SOPS-encrypted secrets |
 | Volumes | Longhorn V1 engine | Ordinary `/var/lib/longhorn` directory; no raw partition |
@@ -28,7 +28,7 @@ Read [cluster settings and reuse](docs/clusters.md) for a field-by-field IP expl
 
 On a fresh Debian administrator workstation, run `sudo bash scripts/prepare-workstation.sh` to install the required command-line tools. The setup is named **Elektro**; its existing GitHub repository remains `astra-base-k8s`.
 
-For another clean installation of the same profile, follow [rebuild laptops from scratch](docs/rebuild.md). The default networking uses Cilium L2; [optional EdgeRouter BGP](docs/bgp.md) uses only stable controller peers.
+For another clean installation of the same profile, follow [rebuild laptops from scratch](docs/rebuild.md). Networking uses [BGP-only LAN access](docs/bgp.md) through stable controller peers, with L2 announcements disabled. Generate the router configuration from the profile using `python3 scripts/configure-bgp.py laptops --node-ip 192.168.2.153`.
 
 ```sh
 # On each freshly installed Debian host, from this repository:
@@ -41,7 +41,7 @@ sudo bash scripts/install-k3s.sh --role hybrid --name k8s1 --ip 192.168.2.153 \
   --config local/cluster.env --init
 ```
 
-Continue with the runbook; this command alone does not install the platform. Supply secrets and reserve a small LAN pool for service IPs before deployment. Keep the controller/API address stable; workers can use DHCP with `--ip auto` (the default). The existing cluster retains `.internal`; another profile can use a suffix such as `production.internal`.
+Continue with the runbook; this command alone does not install the platform. Supply secrets, choose an unused off-link service subnet and configure the LAN router before deployment. Keep the controller/API address stable; workers can use DHCP with `--ip auto` (the default). The existing cluster retains `.internal`; another profile can use a suffix such as `production.internal`.
 
 For a GPU worker/hybrid, [install and verify its driver and NVIDIA toolkit before
 joining](docs/gpu.md#fresh-nvidia-node-prepare-before-joining). Complete driver
@@ -58,9 +58,9 @@ or runtime restart.
 | Administration | `keycloak.admin.internal`, `longhorn.admin.internal`, `grafana.admin.internal` | Private gateway `EDGE_IP` |
 | Applications / production | `foo.internal`, `bar.internal` | Private gateway `EDGE_IP` |
 
-Prefer keeping clients on their existing router DNS and [forwarding only `.internal`](docs/dns.md#edgerouter-conditional-forwarding) to the CoreDNS service's **LAN** `DNS_IP`. Direct client/DHCP use of `DNS_IP` also works. Configure `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS` in `clusters/laptops/settings.yaml`; see [LAN DNS setup](docs/dns.md). Registered node addresses are discovered automatically from k3s; unknown machine names return NXDOMAIN. Wildcard DNS supports new application names; each application needs an exact route, callback and permission grant. Grouped TLS wildcards cover random tests and admin/staging names; direct `foo.internal` names also need [an exact certificate SAN](docs/tls.md#exact-names-for-applications-directly-under-internal). The separate application-platform Flux repository owns deployment naming and lifecycle.
+Prefer keeping clients on their existing router DNS and [forwarding only `.internal`](docs/dns.md#edgerouter-conditional-forwarding) to the CoreDNS service's **routed** `DNS_IP`. Direct client/DHCP use of `DNS_IP` also works. Configure `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS` in `clusters/laptops/settings.yaml`; see [LAN DNS setup](docs/dns.md). Registered node addresses are discovered automatically from k3s; unknown machine names return NXDOMAIN. Wildcard DNS supports new application names; each application needs an exact route, callback and permission grant. Grouped TLS wildcards cover random tests and admin/staging names; direct `foo.internal` names also need [an exact certificate SAN](docs/tls.md#exact-names-for-applications-directly-under-internal). The separate application-platform Flux repository owns deployment naming and lifecycle.
 
-[Windows clients](docs/windows-clients.md) use the same DNS and private-root trust with BGP on or off. Keep L2 enabled for this on-link IP pool. [Private TLS operations](docs/tls.md) covers CA export, renewal and trust after a rebuild; public CAs cannot issue for `.internal`.
+[Windows clients](docs/windows-clients.md) use their existing LAN gateway, DNS and private-root trust. The service pool is off-link, so the router supplies reachability through BGP. [Private TLS operations](docs/tls.md) covers CA export, renewal and trust after a rebuild; public CAs cannot issue for `.internal`.
 
 Internet exposure is **off by default**. An optional separate public gateway has its own IP, certificate and exact routes. `fuzzy.elektrorecykling.pl` can target the same Service as `foo.internal`; `bar.internal` remains private. Forwarding the private gateway to the Internet would defeat this boundary. See [Internal domains](docs/domains.md) and [explicit public exposure](examples/public-exposure/README.md).
 
@@ -92,7 +92,7 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 - [LAN DNS](docs/dns.md)
 - [Windows DNS, ordinary browsers and CA trust](docs/windows-clients.md)
 - [Private TLS, certificates and root recovery](docs/tls.md)
-- [EdgeRouter and optional BGP](docs/bgp.md)
+- [EdgeRouter and BGP-only LAN setup](docs/bgp.md)
 - [Rebuild laptops from scratch](docs/rebuild.md)
 - [Metrics, Grafana access and retention](docs/monitoring.md)
 - [Identity, dynamic projects, agents and OpenFGA](docs/identity-access.md)
@@ -103,6 +103,6 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 - [Validation and security acceptance checks](docs/validation.md)
 - [Upstream release pins and references](docs/upstream.md)
 
-The `examples/` directory is **not reconciled**. It contains the downstream repository starter and its base attachment, a CNPG cluster with required network allowances, a GPU smoke job, optional BGP/kube-vip/NVIDIA reconciliation, public certificates, explicit public exposure and backup examples. Enable only the pieces you need. Flux infrastructure namespaces and their RBAC are reserved for platform administrators; do not grant applications namespace-admin access there.
+The `examples/` directory is **not reconciled**. It contains the downstream repository starter and its base attachment, a CNPG cluster with required network allowances, a GPU smoke job, optional kube-vip/NVIDIA reconciliation, public certificates, explicit public exposure and backup examples. Enable only the pieces you need. Flux infrastructure namespaces and their RBAC are reserved for platform administrators; do not grant applications namespace-admin access there.
 
 For services on top of this base, use a separate Git source and reconciliation attached from `clusters/NAME`. Reuse the installed Flux controllers. The contract describes resource ownership, dependencies, per-profile substitutions, identity grants, network policies, SOPS, data retention and acceptance checks; the starter includes `AGENTS.md` for future human and AI authors.

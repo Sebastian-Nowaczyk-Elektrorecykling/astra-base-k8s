@@ -1,16 +1,17 @@
 # Cluster-specific overrides; shared software defaults live in clusters/base/defaults.yaml.
-# LAN addresses below must match your network; no node IP inventory is needed.
+# LAN/router and routed service addresses are examples; verify against your network.
 apiVersion: v1
 data:
   API_HOST: 192.168.2.153
   LAN_CIDR: 192.168.2.0/24
-  EDGE_IP: 192.168.2.153
-  DNS_IP: 192.168.2.153
+  BGP_ROUTER_IP: 192.168.2.1
+  LB_CIDR: 10.44.0.0/24
+  EDGE_IP: 10.44.0.240
+  DNS_IP: 10.44.0.242
   DNS_CLIENT_CIDR: 192.168.2.0/24
   DNS_UPSTREAMS: 1.1.1.1 9.9.9.9
-  LAN_INTERFACE_REGEX: ^(en.*|eth.*)$
-  LB_START: 192.168.2.240
-  LB_STOP: 192.168.2.249
+  LB_START: 10.44.0.240
+  LB_STOP: 10.44.0.249
   POD_CIDR: 10.42.0.0/16
   IDENTITY_HOST: keycloak.admin.internal
   CLUSTER_NAME: laptops

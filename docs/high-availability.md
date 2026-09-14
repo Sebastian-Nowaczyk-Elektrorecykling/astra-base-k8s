@@ -22,7 +22,13 @@ The initial `--cluster-init` chooses embedded etcd on day one. One controller wo
 6. On each **fresh** added server, run host preparation and join with the **server token**, using `--role controller` or `--role hybrid` and `--server https://API_ENDPOINT:6443`. Do not pass `--init` again. Apply the same k3s version, disabled components, CIDRs, DNS, secret encryption and egress-selector settings.
 7. Confirm all three server nodes and etcd members are healthy. Test one server down at a time; restore quorum before the next test. Existing agents learn server endpoints after registration, but newly joining agents and off-cluster clients still need a reachable initial endpoint.
 
-The kube-vip DaemonSet has NET_ADMIN/NET_RAW on control-plane hosts and is therefore an explicitly trusted infrastructure component. It is optional, pinned upstream software. Test ARP failover on your actual switch; a manifest render cannot prove that your LAN permits VIP takeover.
+The kube-vip DaemonSet has NET_ADMIN/NET_RAW on control-plane hosts and is therefore an explicitly trusted infrastructure component. It is optional, pinned upstream software. Test ARP failover on your actual switch; a manifest render cannot prove that your LAN permits VIP takeover. This API-only example still uses ARP. For a setup without any ARP virtual-IP announcements, use an existing external TCP load balancer instead.
+
+Private DNS/gateway reachability uses BGP from controller peers. After adding stable
+controllers, regenerate the [EdgeRouter configuration](bgp.md#generate-the-router-setup)
+with `python3 scripts/configure-bgp.py laptops --discover`, review and apply their
+new neighbor entries, and verify both service routes before relying on failover.
+Workers need no BGP neighbors. Retired controller neighbors must be removed explicitly.
 
 ## Reusing k8s2 and k8s3 as hybrids
 

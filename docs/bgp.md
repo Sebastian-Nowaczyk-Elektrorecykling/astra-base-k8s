@@ -1,247 +1,207 @@
-# EdgeRouter Pro and optional BGP
+# BGP-only access from the node LAN
 
-The EdgeRouter Pro supports ordinary IPv4 eBGP in EdgeOS. Ubiquiti's
-[v2.0.9 release notes](https://dl.ui.com/firmwares/edgemax/v2.0.9/changenotes-v2.0.9.txt)
-include BGP fixes, its [hotfix.2 notes](https://dl.ui.com/firmwares/edgemax/v2.0.9-hotfix.2/changelog.txt)
-list the ERPro-8, and its [EdgeRouter BGP guide](https://help.uisp.com/hc/en-us/articles/22591213900823-EdgeRouter-Border-Gateway-Protocol-BGP)
-documents static neighbors, prefix lists and passive peers. This setup uses that
-subset. These are EdgeOS commands; UniFi's FRR upload instructions do not apply.
-The configuration has not been exercised on your physical router.
+Cilium allocates service IPs and advertises only the private gateway and LAN DNS
+as two `/32` routes to the directly connected LAN router. L2 service and pod
+announcements are disabled. Every profile inherits the `bgp` Flux stage; there
+is no optional attachment or enable flag to maintain.
 
-Dynamic DHCP neighbor ranges on this firmware have not been verified. The
-optional configuration therefore peers only with **stable controller/hybrid
-addresses**. You already need those stable for etcd/API access. Start with one
-router neighbor for k8s1; add two when adding HA controllers. Ordinary workers can
-join, leave and use DHCP without BGP or router edits. No FRR installation, router
-boot script, routing operator or custom controller is needed.
+Only stable control-plane nodes peer with the router. Workers can join, leave
+and use DHCP without router edits. A controller can forward to a backend on any
+worker using the existing VXLAN tunnel, `externalTrafficPolicy: Cluster` and
+SNAT. BGP does not replace the CNI, install node routes or advertise Pod CIDRs,
+ClusterIPs, the entire pool, or the optional public gateway. Both advertisements
+carry `no-advertise` so the receiving router must not propagate them to other
+BGP peers. Keep the LAN router's firewall private and WAN forwarding disabled;
+BGP communities are routing policy, not a client firewall.
 
-## Minimum router configuration: default L2
+[Cilium BGP resources](https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane-configuration/)
+define these selectors, host routes, communities and forwarding semantics.
 
-BGP is **off by default** and its reconciliation example is not included in any
-profile. For machines on the same wired LAN, the minimum is:
+## Address plan
 
-1. Keep the initial controller/API address stable, initially `192.168.2.153`.
-2. Exclude `192.168.2.240`–`192.168.2.249` from all DHCP ranges and other static
-   allocations. It is one pool exclusion, not a reservation for every worker or
-   virtual IP. Verify existing leases have released those addresses before use.
-3. After DNS passes the bootstrap checks, preferably keep clients using the
-   router's DNS and add [conditional forwarding for `.internal`](dns.md#edgerouter-conditional-forwarding).
-   A single test workstation can instead use a [Windows suffix rule](windows-clients.md#option-b-one-workstation-with-a-suffix-rule)
-   or `192.168.2.242` as its resolver. Keep external DNS independent of the cluster
-   so hosts can boot while it is absent.
-
-Those addresses assume **`192.168.2.0/24`**. For a different `192.168.x.x` network,
-edit the profile to match the actual prefix/mask; `/16` is not implied by the
-address beginning with `192.168`. Keep Pod and Service ranges on `10.42.0.0/16`
-and `10.43.0.0/16` unless another routed network already uses them.
-The [settings validator](../scripts/validate-cluster.py) checks overlaps and the
-entire pool against `LAN_CIDR`. It cannot inspect router leases or detect a free IP.
-
-The router's existing DHCP service suffices; see its [official DHCP settings](https://help.uisp.com/hc/en-us/articles/22591175599639-EdgeRouter-DHCP-Server).
-Do not add a public secondary DNS resolver on clients expecting internal names:
-clients may query either server. Use the cluster's `DNS_UPSTREAMS` for external
-queries. Leave WAN port forwarding and inbound access disabled. There are no
-required BGP, static service-route or per-application DNS entries for this mode.
-
-## L2 and BGP together on this LAN
-
-Both mechanisms can deliver traffic to the same Service VIP in this design.
-They operate at different points in the path; this is not two competing ARP
-responders. The following assumes the profile's pool is on the nodes' wired LAN
-and the client's actual subnet mask/routes agree with the router:
-
-| Client path | BGP off | BGP established |
+| Setting | laptops example | Purpose |
 | --- | --- | --- |
-| Windows on the VIP's subnet | ARP selects the L2 lease holder | Still ARP to the L2 holder; normally bypasses the router |
-| Router itself, including forwarded DNS queries | Connected LAN route, then ARP for the VIP | More-specific `/32` selects a controller next hop |
-| Allowed client on another VLAN/VPN | Router's connected LAN route, then ARP | Router's BGP `/32`, then the selected controller |
+| `LAN_CIDR` | `192.168.2.0/24` | Existing physical node/client LAN |
+| `API_HOST` | `192.168.2.153` | Stable initial controller; separate from service VIPs |
+| `BGP_ROUTER_IP` | `192.168.2.1` | Actual BGP router on that same LAN |
+| `BGP_PEER_ASN` / `BGP_LOCAL_ASN` | `64512` / `64513` | Router / cluster private ASNs |
+| `LB_CIDR` | `10.44.0.0/24` | Unused routed service subnet, off-link for clients |
+| `LB_START`–`LB_STOP` | `10.44.0.240`–`10.44.0.249` | Cilium allocation range within that subnet |
+| `EDGE_IP` / `DNS_IP` | `10.44.0.240` / `10.44.0.242` | Distinct HTTPS / DNS service VIPs |
 
-L2 may select a worker while BGP selects a controller. Both can forward to any
-ready Service backend: keep `externalTrafficPolicy: Cluster`, the current VXLAN
-tunnel and explicit `loadBalancer.mode: snat`. Do not set `loadBalancerClass` to
-either announcement implementation: leaving it unset allows both to select the
-Service. `Local` is incompatible with Cilium L2; a dedicated controller may have
-no local DNS/gateway pod. See [L2 requirements](https://docs.cilium.io/en/stable/network/l2-announcements/)
-and [BGP Service selection](https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane-configuration/#load-balancer-class).
+These are example inputs, not discovered router settings or free addresses.
+Verify the actual mask, router ASN, DHCP reservations and all LAN/VPN/routed
+networks. `LB_CIDR` must not overlap any of them, or the installed Pod/Service
+ranges. Do not put the service subnet on a router/node interface or distribute
+it as a client connected subnet. It needs no DHCP scope or per-client routes.
+The router learns only the two host routes, not the whole `LB_CIDR`.
 
-SNAT sends cross-node replies back through the receiving node, avoiding a direct
-server-return dependency. The backend may see a node IP; access decisions use the
-verified identity, not the original client IP. Do not introduce DSR or use backend
-source IPs as an authorization boundary without redesigning/testing that path.
-See [Cilium forwarding modes](https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/#direct-server-return-dsr).
+With L2 disabled, an on-link VIP would fail: a client would ARP directly for it
+instead of consulting the router's BGP route. The off-link VIPs make normal LAN
+clients use their existing default gateway. That gateway must be the configured
+BGP router (or already route to it). Windows needs no BGP software or routes to
+individual nodes. Existing DHCP, router DNS and private-CA trust suffice.
 
-There is one significant failover trap: a stale BGP `/32` still wins over the
-connected LAN route. A working L2 holder cannot rescue router-originated/routed
-traffic until that route is withdrawn. The optional peer now requests a 9-second
-hold time and 3-second keepalive, replacing 90/30; confirm the negotiated values
-with `show ip bgp neighbors 192.168.2.153`. Graceful restart is disabled on Cilium
-to avoid retaining stale routes through a hard laptop failure. Leave stale-route
-retention disabled for these peers on the router too. These settings reduce one
-failure-detection delay; they do not promise nine-second application recovery.
-See [BGP timers](https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane-configuration/#timers)
-and [failure scenarios](https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane-operation/#failure-scenarios).
+`scripts/validate-cluster.py` checks the complete pool, disjoint ranges, VIP/API
+separation, directly connected router and private ASNs whenever a profile is
+exported, imported or bootstrapped. It cannot discover other networks or leases.
+Do not change a running cluster's Pod/Service CIDRs to adopt these examples.
 
-With no remaining BGP route, this router can use its connected LAN route and L2
-again, provided another eligible Cilium node and the backends remain healthy.
-L2 election also requires a working Kubernetes API; one-controller loss is not
-quorum HA. Existing connections can break when their ingress node changes.
-Neither mechanism checks the whole application: `Cluster` BGP advertisements
-remain present even when the Service has no ready endpoints.
+## Generate the router setup
 
-Keep the pool excluded from DHCP, allow ARP/gratuitous ARP on the nodes' VLAN,
-and ensure `LAN_INTERFACE_REGEX` matches a Cilium-selected wired interface on
-every possible L2 holder. Workers joining on an unrelated VLAN are not covered
-by this single-LAN policy. Do not add a second ARP speaker or assign these VIPs to
-NICs. The optional kube-vip API address uses a separate address outside this pool.
-Wi-Fi Windows clients can use a bridged LAN if the AP permits access to these
-wired hosts; guest isolation can block it. BGP does not bypass that isolation.
+The supplied generator targets an EdgeRouter Pro using EdgeOS, following
+[Ubiquiti's BGP configuration](https://help.uisp.com/hc/en-us/articles/22591213900823-EdgeRouter-Border-Gateway-Protocol-BGP).
+It adds no router software, controller or background process. Different router
+platforms require equivalent native configuration. EdgeOS dynamic neighbor ranges
+are not assumed; only stable controllers need explicit neighbors.
 
-For a single LAN, BGP remains optional and adds little to direct workstation
-traffic. It is useful for explicit router paths and eventual routed networks;
-it does not remove DNS/CA setup or make a service Internet-accessible.
-
-## Enable optional BGP in one profile
-
-Keep L2 and its on-link pool enabled while testing BGP. Use the router's actual
-LAN address below; `.1` is an example, not discovery. The defaults use private
-ASNs 64512 for the router and 64513 for the cluster. If the router already runs
-BGP, use its existing ASN and preserve its routing policies. Use another cluster
-ASN and distinct service IPs for a second cluster.
-
-Add to `clusters/laptops/settings.yaml` under `data`:
-
-```yaml
-  BGP_ENABLED: 'true'
-  BGP_ROUTER_IP: 192.168.2.1
-  # Optional overrides; these are already the shared defaults:
-  BGP_LOCAL_ASN: '64513'
-  BGP_PEER_ASN: '64512'
-```
-
-Copy `examples/bgp-reconciliation.yaml` into `clusters/laptops/bgp.yaml` and add
-`- bgp.yaml` to that profile's `kustomization.yaml` resources. Export/check the
-settings, commit and push. Flux enables Cilium's built-in BGP capability and
-applies the three upstream Cilium BGP resources. The first Cilium bootstrap uses
-the same flag if enabled before installation.
-
-For an already installed cluster, reconcile Cilium and follow its documented
-agent restart when activating the feature:
+Edit `clusters/laptops/settings.yaml` once, then on the administrator workstation:
 
 ```sh
-flux reconcile kustomization flux-system --with-source
-flux reconcile kustomization cilium --timeout=20m
-kubectl -n kube-system rollout restart daemonset/cilium
-kubectl -n kube-system rollout status daemonset/cilium --timeout=10m
-flux reconcile kustomization bgp
+mkdir -p local/laptops
+bash scripts/configure-cluster.sh --export laptops > local/laptops/cluster.env
+# Before a cluster exists, specify each real, stable controller address:
+python3 scripts/configure-bgp.py laptops --node-ip 192.168.2.153 \
+  > local/laptops/edgerouter-bgp.txt
+# Or, with this cluster's kubeconfig, discover all control-plane InternalIPs:
+python3 scripts/configure-bgp.py laptops --discover > local/laptops/edgerouter-bgp.txt
 ```
 
-Enabling an agent feature is a rollout, not a claim of zero disruption. With no
-configured router neighbor, Cilium's connection attempts cannot establish a
-session and the router learns no routes. L2 continues serving the same VIPs;
-unestablished BGP is not a dependency of storage, identity, DNS or applications.
-Cilium initiates the connection, so there is no laptop BGP listening port to open.
-See [Cilium BGP activation](https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane/index.html).
+Choose one generator invocation. `--node-ip` is repeatable for HA controllers
+and contacts no cluster. `--discover` verifies the kubeconfig API endpoint and,
+when present, the live cluster's profile identity before listing controllers.
+It accepts one IPv4 InternalIP per controller and rejects missing, duplicate or
+off-LAN peers. Discovery does not prove DHCP stability; reserve those addresses.
+Neither mode modifies the router, cluster or tracked profile.
 
-## EdgeOS configuration for one controller
+Review the generated file against a backup of the router's configuration. It
+stages exact import filters for `EDGE_IP/32` and `DNS_IP/32`, a deny-all export
+filter, passive controller neighbors and a two-prefix limit. Use the router's
+existing ASN and router-id if BGP is already configured; omit the generated
+router-id command if preserving a different existing ID. Generated policy names
+`ELEKTRO-<PROFILE>-IN/OUT` must be reserved for this cluster, with no extra permit
+rules. Apply the file's commands in the EdgeOS CLI. They end at `compare` so you
+can inspect the diff, then execute `commit`, `save`, `exit` yourself.
 
-Use the router CLI. First inspect its existing BGP configuration and keep a
-backup of the router configuration. Adapt the ASN/IPs and policy names below to
-the profile; these commands are for a router that does not already use these
-names. Apply all filters before committing the new neighbor.
+The generated configuration has no redistribution, default/Pod/Service route,
+static route, NAT, WAN firewall change, or eBGP multihop. If a LAN-local router
+firewall drops BGP, allow TCP 179 **from the configured controller IPs to the
+router's LAN IP**, with established return traffic, in the existing LAN-local
+rule set before its drop rule. Forward DNS/HTTPS from the node LAN to the routed
+VIPs through your existing LAN firewall; do not open these addresses to the WAN
+or other client networks. Cilium initiates sessions; nodes need no listening BGP
+port. Preserve other neighbors and their policies, including export filtering.
 
-```text
-configure
-set policy prefix-list ELEKTRO-LAPTOPS-IN rule 10 action permit
-set policy prefix-list ELEKTRO-LAPTOPS-IN rule 10 prefix 192.168.2.240/32
-set policy prefix-list ELEKTRO-LAPTOPS-IN rule 20 action permit
-set policy prefix-list ELEKTRO-LAPTOPS-IN rule 20 prefix 192.168.2.242/32
-set policy prefix-list ELEKTRO-LAPTOPS-OUT rule 10 action deny
-set policy prefix-list ELEKTRO-LAPTOPS-OUT rule 10 prefix 0.0.0.0/0
-set policy prefix-list ELEKTRO-LAPTOPS-OUT rule 10 le 32
-set protocols bgp 64512 parameters router-id 192.168.2.1
-set protocols bgp 64512 neighbor 192.168.2.153 remote-as 64513
-set protocols bgp 64512 neighbor 192.168.2.153 passive
-set protocols bgp 64512 neighbor 192.168.2.153 prefix-list import ELEKTRO-LAPTOPS-IN
-set protocols bgp 64512 neighbor 192.168.2.153 prefix-list export ELEKTRO-LAPTOPS-OUT
-set protocols bgp 64512 neighbor 192.168.2.153 maximum-prefix 2
-compare
-commit
-save
-exit
-```
+Bootstrap Cilium and Flux using [the main runbook](bootstrap.md). Both use the
+same BGP-enabled, L2-disabled values. Flux watches the Cilium values ConfigMap;
+the chart rolls agents/operators when configuration changes. No separate Helm
+upgrade or manual restart is needed during normal reconciliation. The `bgp`
+stage waits for `network`/Cilium CRDs, but does not wait for peer establishment:
+DNS/gateway Services must be created before their routes can be advertised.
+A green Flux stage alone therefore does not prove LAN connectivity.
 
-The import list accepts only the two exact service host routes; unmatched routes
-are denied. The export list sends no routes to the laptops. There is no default
-route, Pod/Service CIDR, full service-pool advertisement, redistribution, static
-blackhole route or eBGP multihop. If the router already peers with other routers
-or an ISP, also exclude these two prefixes from those peers' export policies;
-this neighbor's export filter does not filter other sessions.
+After direct DNS acceptance, use `--dns-forwarding` to include the router's
+conditional forwarder for this profile's suffix, or follow [the DNS runbook](dns.md#edgerouter-conditional-forwarding).
+Keep clients on router DNS and keep cluster hosts' bootstrap DNS independent.
+If the router rejects private DNS responses, use the existing suffix-specific
+DNS rebind exception procedure; do not disable protection globally.
 
-Where an existing LAN-to-router firewall drops connections, allow **TCP 179 from
-the configured controller IPs to this router's LAN IP**, with established return
-traffic. Use the existing rule set bound to that LAN's `local` direction, before
-its drop rule. Interface and rule-set names depend on the router's configuration;
-do not replace its firewall or open BGP on the WAN. Direct LAN routing needs no NAT.
+## Migrate an existing L2 installation
 
-For each additional stable controller/hybrid, repeat the five `neighbor` lines
-with its IP. Cilium selects control-plane Nodes by Kubernetes label, with no
-three-node inventory. One best route is enough for failover; ECMP is optional
-and is not required in this minimal example. Remove a retired controller's
-router neighbor as part of its [node maintenance](node-role-changes.md).
+This changes service addresses and rolls Cilium; schedule an interruption and
+keep administrative access through the physical controller/API endpoint.
+Do not merge/promote the change into the branch watched by Flux until the router
+and client routing prerequisites are ready.
+
+1. Record current `EDGE_IP`, `DNS_IP`, LB pool, Cilium values and router/DNS
+   configuration for rollback. Verify a direct node/API connection and reserve
+   an unused off-link `LB_CIDR`. Keep installed Pod/Service networks unchanged.
+2. Update the profile with that subnet, pool, two distinct VIPs and actual router
+   IP/ASNs. Remove retired `BGP_ENABLED` and `LAN_INTERFACE_REGEX` overrides. If
+   optional BGP was previously attached as `clusters/NAME/bgp.yaml`, remove that
+   file/resource while adopting the shared stage of the same name; never retain
+   two Kustomize definitions/owners of `flux-system/bgp`.
+3. Generate and stage the router configuration for the new VIPs and stable
+   controller peers. Confirm the router's existing policies and TCP 179 access,
+   then commit/save the router changes. Routes appear after Cilium advertises them.
+4. Promote the reviewed Git change and reconcile through the direct API:
+
+   ```sh
+   flux reconcile kustomization flux-system --with-source
+   flux reconcile kustomization cilium --timeout=20m
+   kubectl -n kube-system rollout status daemonset/cilium --timeout=10m
+   kubectl -n kube-system rollout status deployment/cilium-operator --timeout=10m
+   flux reconcile kustomization network
+   flux reconcile kustomization bgp
+   flux reconcile kustomization dns
+   flux reconcile kustomization edge --timeout=20m
+   ```
+
+   Flux prunes its former `CiliumL2AnnouncementPolicy/lan`. Other manually managed
+   L2 policies must be retired by their owner; the disabled agent feature prevents
+   all Cilium L2 announcements. Pool updates can reassign Service IPs; wait for
+   the actual DNS and gateway allocations to match the profile.
+5. Verify both BGP `/32`s and direct DNS/HTTPS using the new VIPs. Update router
+   suffix forwarding and any direct-DNS DHCP/NRPT/client settings from the old
+   `DNS_IP` to the new one. Remove the exact old conditional-forwarding entry
+   before adding the replacement; do not leave both servers for the same suffix.
+   Re-export ignored env files and clear client DNS caches. Internal DNS records
+   follow `EDGE_IP`; hostname-based certificates and application routes remain
+   usable. Keep existing CA/identity state.
+6. Remove obsolete service routes/filters after acceptance. If migration fails,
+   revert the Git change and restore the recorded router/client DNS configuration
+   together, then verify old Service allocations and reachability. Do not rebuild
+   the cluster or reuse a guessed old VIP as a rollback method.
+
+The optional kube-vip API example is a separate **ARP-based API HA** mechanism
+and is not enabled by this setup. If all virtual IPs must avoid ARP announcements,
+use the physical API endpoint or an existing external TCP load balancer for HA;
+see [HA operations](high-availability.md).
 
 ## Addresses, DNS and acceptance
 
-Cilium advertises the **assigned LoadBalancer IPs** of only `kube-system/lan-dns`
-and the private `edge/platform` gateway. Both use `externalTrafficPolicy: Cluster`,
-so the ingress controller node can send traffic to a healthy backend on a worker.
-The public gateway is excluded. Cilium's [BGP resource semantics](https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane-configuration/)
-describe these selectors and host-route advertisements.
-
-DNS remains correct without per-node or per-peer edits: application wildcards
-and the gateway's IP reservation use the same `EDGE_IP` setting; DNS itself uses
-the same `DNS_IP` as its Service reservation. Node records continue following
-Kubernetes addresses. BGP transports those stable service IPs; it does not allocate
-them or register DNS names. Moving a pod/node or adding a BGP peer requires no DNS
-change. Choosing a different VIP still requires updating its single profile value
-and the router's exact import filter. Keeping two stable service IPs is deliberate:
-clients and bootstrap cannot discover their DNS server through that same DNS server.
-
-After committing the router configuration, check:
+On EdgeOS, using your profile values:
 
 ```text
 show ip bgp summary
-show ip bgp
-show ip route 192.168.2.240
-show ip route 192.168.2.242
+show ip bgp neighbors 192.168.2.153
+show ip route 10.44.0.240
+show ip route 10.44.0.242
 ```
 
-The neighbor must be Established, with only the two intended `/32` routes and a
-controller next hop. On the workstation check the Service allocations and DNS:
+Expect established controller peers and exactly the two `/32` routes via their
+physical LAN IPs, with `no-advertise` preserved. Verify no propagation to other
+BGP peers and no public gateway/Pod/ClusterIP routes. Cilium requests 9-second
+hold/3-second keepalive timers and disables graceful restart; check the negotiated
+timers and disable stale-route retention for these peers on the router. These
+bound one detection delay, not end-to-end recovery time.
 
 ```sh
 kubectl -n kube-system get service lan-dns -o wide
 kubectl -n envoy-gateway-system get services -o wide
 kubectl get ciliumbgpclusterconfigs,ciliumbgpnodeconfigs
-dig @192.168.2.242 grafana.admin.internal +short
-dig @192.168.2.242 k8s2.hosts.internal +short
+kubectl get ciliuml2announcementpolicies
+kubectl -n kube-system get configmap cilium-config \
+  -o jsonpath='{.data.enable-bgp-control-plane}{"\n"}{.data.enable-l2-announcements}{"\n"}'
+dig @10.44.0.242 grafana.admin.internal +short
+dig @10.44.0.242 k8s2.hosts.internal +short
+dig @192.168.2.1 grafana.admin.internal +short
 ```
 
-A same-subnet DNS/HTTPS test may use L2 directly; it does not prove BGP works.
-If using router conditional DNS, query both `@192.168.2.242` and `@192.168.2.1`;
-the router's upstream lookup exercises its selected VIP route. Verify the router's
-selected routes and test HTTPS from an allowed routed client if available.
-In a maintenance window with surviving API quorum/backends, compare new requests
-from same-subnet and routed clients while one peer/holder is lost. Observe route
-withdrawal, the replacement next hop (or connected-route fallback), L2 lease
-movement and recovery independently. A graceful BGP shutdown alone does not test
-a silent node failure. Restore the node/peer and confirm only the intended two
-prefixes are learned. See [Windows acceptance](windows-clients.md#verify-and-troubleshoot).
-Do not remove L2 or move the pool off-link as part of this optional setup. BGP
-route reachability also does not grant a routed subnet DNS access: extend DNS's
-source ranges, Cilium policy and admission together if adding another client LAN.
+Expect BGP `true`, L2 `false` (or an absent false key), no old `lan` L2 policy,
+gateway DNS `10.44.0.240`, and the node's current LAN address. Test HTTPS by
+hostname with the existing trusted private CA from an ordinary LAN client.
+Unlike the former on-link pool, that client's traffic now uses the router.
+Confirm an unapproved network cannot query DNS or reach the private gateway.
 
-To disable BGP, first remove this profile's `bgp.yaml` resource and let Flux prune
-its BGP resources, verifying route withdrawal while L2 still works. Remove only
-this cluster's neighbors/unused lists from EdgeOS. Then set `BGP_ENABLED: 'false'`
-and reconcile/restart Cilium as above. Internet exposure remains a separate
-[explicit operation](../examples/public-exposure/README.md).
+During an approved hardware acceptance window with surviving API quorum and
+backends, test a controller loss and observe route withdrawal/new next hop and
+fresh DNS/HTTPS requests. There is **no L2 fallback** if all peers fail. A lone
+controller is not HA; add two stable controllers and regenerate the router
+snippet with `--discover` for quorum/failover. Existing connections can break.
+`Cluster` advertisement does not withdraw just because an application has no
+ready endpoints. Remove retired controller neighbors explicitly; regeneration
+never deletes router configuration. Consult [Cilium failure scenarios](https://docs.cilium.io/en/stable/network/bgp-control-plane/bgp-control-plane-operation/#failure-scenarios).
+
+Repository checks cover configuration and manifests. They do not execute EdgeOS
+commands or test sessions, switches, client firewalls or physical failover.

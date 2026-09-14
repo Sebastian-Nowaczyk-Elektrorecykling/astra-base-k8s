@@ -1,4 +1,4 @@
-# Optional. Only the stable control-plane machines peer with the LAN router.
+# Only stable control-plane machines peer with the directly connected LAN router.
 apiVersion: cilium.io/v2
 kind: CiliumBGPClusterConfig
 metadata:
@@ -26,7 +26,7 @@ metadata:
 spec:
   timers:
     connectRetryTimeSeconds: 5
-    # A stale /32 wins over the connected LAN route even if L2 has recovered.
+    # Bound stale routes after a controller fails; there is no L2 fallback.
     holdTimeSeconds: 9
     keepAliveTimeSeconds: 3
   gracefulRestart:
@@ -47,6 +47,9 @@ metadata:
 spec:
   advertisements:
   - advertisementType: Service
+    attributes:
+      communities:
+        wellKnown: [no-advertise]
     service:
       addresses:
       - LoadBalancerIP
@@ -55,6 +58,9 @@ spec:
         io.kubernetes.service.namespace: kube-system
         io.kubernetes.service.name: lan-dns
   - advertisementType: Service
+    attributes:
+      communities:
+        wellKnown: [no-advertise]
     service:
       addresses:
       - LoadBalancerIP

@@ -15,15 +15,15 @@ remain the tools for [individual node/role maintenance](node-role-changes.md).
    Temporarily change DHCP DNS if it points only at the cluster you are wiping.
 2. Save any required data/credentials offline, then power off **all** old cluster
    nodes. Do not let the old and new installations advertise the same service IPs
-   simultaneously. If you enabled BGP or public port forwarding separately,
-   disable those old cluster entries until the replacement passes acceptance.
+   simultaneously. Remove stale controller BGP neighbors and disable any optional public port
+   forwarding until the replacement passes acceptance.
 3. Reinstall Debian 12/13 on each laptop, wiping/reformatting the old OS/data
    filesystems, including `/var/lib/rancher/k3s`, `/etc/rancher/k3s` and
    `/var/lib/longhorn`. Keeping an old `/var` filesystem is not a clean reinstall.
    Retain the intended host names if useful; they do not retain Kubernetes identity.
 
 No router reset is needed. Preserve the controller's DHCP reservation and the
-excluded service pool, after checking they match the real LAN.
+routed service subnet, after checking the replacement profile and router settings.
 
 ## 2. Prepare the workstation checkout and profile
 
@@ -64,14 +64,14 @@ different credential paths, archive those too.
 In `clusters/laptops/settings.yaml`:
 
 - Keep the chosen network and `.internal` names. Defaults are API
-  `192.168.2.153`, pool `.240`–`.249`, gateway `.240`, DNS `.242` on
-  `192.168.2.0/24`. Adapt them if your actual LAN/mask differs. Exclude the pool
-  from DHCP; workers need no reservations. See [the settings reference](clusters.md).
+  `192.168.2.153` on LAN `192.168.2.0/24`, router `192.168.2.1`, routed pool
+  `10.44.0.240`–`10.44.0.249`, gateway `10.44.0.240`, DNS `10.44.0.242`.
+  Verify the actual LAN/mask and disjoint `LB_CIDR`; workers need no reservations. See [the settings reference](clusters.md).
 - Remove any profile overrides for `FGA_STORE_ID` and `FGA_MODEL_ID`, so both
   inherit `NOT_CONFIGURED` from the base. The empty OpenFGA database will generate
   new IDs even if a credential happened to be reused.
-- For the first clean test, leave BGP disabled and optional public/API-VIP stages
-  out of the profile. Use the initial controller IP as `API_HOST`. Preserve shared
+- Generate and apply [BGP router configuration](bgp.md#generate-the-router-setup)
+  for the replacement controllers; leave optional public/API-VIP stages out of the profile. Use the initial controller IP as `API_HOST`. Preserve shared
   infrastructure and any Flux customizations. Existing generated manifests can be
   reused. If `flux-system/` was cleared completely, bootstrap regenerates it;
   an incomplete customization must be repaired before retrying.
@@ -138,13 +138,13 @@ flux get kustomizations
 flux get helmreleases -A
 kubectl get clusters.postgresql.cnpg.io -A
 kubectl -n kube-system get service lan-dns -o wide
-dig @192.168.2.242 k8s2.hosts.internal +short
-dig @192.168.2.242 grafana.admin.internal +short
+dig @10.44.0.242 k8s2.hosts.internal +short
+dig @10.44.0.242 grafana.admin.internal +short
 ```
 
-Verify the node answer is its current LAN IP and Grafana resolves to `.240`.
+Verify the node answer is its current LAN IP and Grafana resolves to `10.44.0.240`.
 Complete [DNS checks](dns.md), [access checks](validation.md) and a disposable
 PVC/database test before keeping data. Point clients/DHCP back at `.242` only
 after the resolver works. Verify the GPU node's plugin/capacity and
 run its [GPU smoke test](gpu.md#enable-the-device-plugin-and-verify-the-joined-node).
-Enable [BGP](bgp.md) later if needed; it is not a prerequisite for this rebuild.
+Complete [BGP acceptance](bgp.md#addresses-dns-and-acceptance) before relying on LAN DNS/HTTPS; there is no L2 fallback.

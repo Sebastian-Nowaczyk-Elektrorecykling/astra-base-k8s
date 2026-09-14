@@ -32,7 +32,7 @@ for key in API_HOST POD_CIDR SERVICE_CIDR CLUSTER_DNS INTERNAL_DOMAIN; do
   patch=$(jq --arg key "$key" --arg value "${!key}" '.data[$key]=$value' <<<"$patch")
 done
 # Optional LAN settings can also be supplied by an existing administrator env file.
-for key in LAN_CIDR EDGE_IP DNS_IP DNS_CLIENT_CIDR DNS_UPSTREAMS LB_START LB_STOP LAN_INTERFACE_REGEX IDENTITY_HOST PUBLIC_EDGE_IP; do
+for key in LAN_CIDR LB_CIDR EDGE_IP DNS_IP DNS_CLIENT_CIDR DNS_UPSTREAMS LB_START LB_STOP BGP_ROUTER_IP BGP_LOCAL_ASN BGP_PEER_ASN IDENTITY_HOST PUBLIC_EDGE_IP; do
   if [[ -n ${!key:-} ]]; then
     patch=$(jq --arg key "$key" --arg value "${!key}" '.data[$key]=$value' <<<"$patch")
   fi

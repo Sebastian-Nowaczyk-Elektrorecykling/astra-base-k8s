@@ -14,23 +14,6 @@ spec:
       - envoy-gateway-system
       - kube-system
 ---
-apiVersion: cilium.io/v2alpha1
-kind: CiliumL2AnnouncementPolicy
-metadata:
-  name: lan
-spec:
-  serviceSelector:
-    matchExpressions:
-    - key: io.kubernetes.service.namespace
-      operator: In
-      values:
-      - envoy-gateway-system
-      - kube-system
-  interfaces:
-  - ${LAN_INTERFACE_REGEX}
-  externalIPs: false
-  loadBalancerIPs: true
----
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:

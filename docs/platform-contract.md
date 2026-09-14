@@ -18,7 +18,7 @@ outside this repository.
 | Owner | Resources and responsibilities |
 | --- | --- |
 | This base | k3s/Cilium, Flux controllers and `flux-system` sync, shared operators/CRDs, admission/network guards, storage classes, private DNS/CA/gateway, Keycloak/OpenFGA/Authorino and their databases, infrastructure metrics |
-| Cluster administrator in this base profile | LAN/API/pool settings, optional BGP/API VIP/GPU, downstream Git source/attachment, credentials that let Flux read/decrypt the new repository, approval of public exposure |
+| Cluster administrator in this base profile | LAN/API/routed-pool/BGP settings, optional API VIP/GPU, downstream Git source/attachment, credentials that let Flux read/decrypt the new repository, approval of public exposure |
 | Downstream trusted platform repository | Application namespaces/workloads/Services, application databases/PVCs, narrowly scoped network allowances, exact HTTPRoutes and named ReferenceGrants, application Secrets and supported identity/permission provisioning |
 | Human/upstream identity administration | Initial users/MFA, exact callback registration, service accounts, deliberate OpenFGA membership/grants and backup/restore of identity state |
 
@@ -81,7 +81,8 @@ for that child. [Flux Kustomization behavior](https://fluxcd.io/flux/components/
 | `controllers` | Longhorn, CNPG, cert-manager, Kyverno and Envoy Gateway controllers/CRDs |
 | `admission` | Exposure guards and CNPG storage mutation, with an explicit check of Kyverno's nested readiness status |
 | `storage` | All three Longhorn StorageClasses, after admission/controllers |
-| `network` | Service pool, L2 announcements and default application ingress policy |
+| `network` | Routed service IP pool and default application ingress policy |
+| `bgp` | Private DNS/gateway host routes to the node LAN router, after `network`; peer establishment needs separate acceptance |
 | `cluster-dns` | Pod resolution of the profile's internal suffix, after LAN DNS |
 | `access` | Private gateway/identity/authorization dependencies and accepted security policy on all four application listeners |
 | `monitoring` | Prometheus/Grafana/operator before additional monitors/rules |
@@ -108,7 +109,7 @@ of copying LAN addresses, node names or `laptops` into application manifests.
 | `IDENTITY_HOST` | Canonical issuer host, which may differ from the private Keycloak administration host after public opt-in |
 | `FGA_STORE_ID`, `FGA_MODEL_ID` | Base gateway's store/model; not secrets, but must be initialized on this cluster |
 | `PG_IMAGE` | Reviewed CNPG PostgreSQL image pin; using it opts into that shared pin's future changes. Own a separate reviewed pin when a database needs independent upgrades |
-| `EDGE_IP`, `DNS_IP`, `LAN_CIDR`, `POD_CIDR`, `SERVICE_CIDR`, `CLUSTER_DNS` | Platform network settings, normally consumed through DNS/Services rather than embedded in applications |
+| `EDGE_IP`, `DNS_IP`, `LB_CIDR`, `LAN_CIDR`, `POD_CIDR`, `SERVICE_CIDR`, `CLUSTER_DNS` | Platform network settings, normally consumed through DNS/Services rather than embedded in applications |
 | HTTPRoute / ReferenceGrant | `gateway.networking.k8s.io/v1` / `v1beta1` respectively |
 | CNPG Cluster | `postgresql.cnpg.io/v1`; no additional PostgreSQL operator is needed |
 | CiliumNetworkPolicy | `cilium.io/v2`, in the application's namespace |
@@ -139,8 +140,8 @@ up route, callback and permission objects together in the downstream lifecycle.
 ## HTTP entry and identity
 
 Client prerequisites are a resolver that knows this profile's suffix, a route to
-its private gateway, and trust in its private CA. BGP does not change the names,
-VIPs or certificate trust. Use [Windows onboarding](windows-clients.md) and
+its private gateway, and trust in its private CA. Names and certificate trust are
+independent of BGP; migrating the former on-link pool changes the service VIPs. Use [Windows onboarding](windows-clients.md) and
 [TLS operations](tls.md); application repositories must not distribute signing
 keys, disable TLS validation or take ownership of the base wildcard Certificate.
 Routine leaf renewal is automatic; root trust distribution and recovery are
@@ -227,7 +228,7 @@ of weakening admission. Kubernetes administrators, host root and port-forward
 permissions remain privileged access paths; not every intra-cluster protocol is
 an OIDC HTTP endpoint.
 
-BGP is optional private LAN routing, not Internet publication. A public alias
+BGP supplies private service routing through the directly connected node LAN router. L2 announcements are disabled; `EDGE_IP` and `DNS_IP` belong to an off-link `LB_CIDR`. The base advertises only those two service host routes with `no-advertise` and excludes the public gateway. Existing L2 deployments need the coordinated [address/router/DNS migration](bgp.md#migrate-an-existing-l2-installation). A public alias
 requires the separate public gateway/IP/certificate, approved exact route and
 AuthConfig host, callback/grant, reachable canonical issuer, external DNS and
 deliberate firewall/NAT action. Follow [public exposure](../examples/public-exposure/README.md).

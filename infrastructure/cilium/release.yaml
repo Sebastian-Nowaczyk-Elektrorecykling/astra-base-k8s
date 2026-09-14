@@ -26,8 +26,6 @@ spec:
       retries: 3
   values:
     k8sServiceHost: ${API_HOST}
-    bgpControlPlane:
-      enabled: ${BGP_ENABLED}
   valuesFrom:
   - kind: ConfigMap
     name: cilium-values

@@ -9,6 +9,7 @@ cp -r "$repo/clusters/base" "$tmp/clusters/base"
 cp "$repo/scripts/lib/cluster-settings.sh" "$tmp/scripts/lib/"
 cp "$repo/scripts/validate-cluster.py" "$tmp/scripts/"
 cp "$repo/scripts/configure-cluster.sh" "$tmp/scripts/"
+cp "$repo/scripts/configure-bgp.py" "$tmp/scripts/"
 cp "$repo/clusters/laptops/settings.yaml" "$tmp/clusters/laptops/"
 settings="$tmp/clusters/laptops/settings.yaml"
 # Files from the retired unnamed bootstrap must not silently target laptops.
@@ -46,4 +47,14 @@ EOF
   bash "$tmp/scripts/configure-cluster.sh" "$tmp/cluster.env"
   [[ $(sha256sum "$settings") == "$digest" ]]
 done
+# BGP values import through the same profile handoff; generator uses real local kubectl.
+cat >>"$tmp/cluster.env" <<'EOF'
+BGP_ROUTER_IP=192.168.2.2
+BGP_LOCAL_ASN=64515
+BGP_PEER_ASN=64514
+EOF
+bash "$tmp/scripts/configure-cluster.sh" "$tmp/cluster.env"
+python3 "$tmp/scripts/configure-bgp.py" laptops --node-ip 192.168.2.153 >"$tmp/router.txt"
+grep -Fq 'set protocols bgp 64514 neighbor 192.168.2.153 remote-as 64515' "$tmp/router.txt"
+grep -Fq 'set protocols bgp 64514 parameters router-id 192.168.2.2' "$tmp/router.txt"
 echo 'Configuration mismatch rejection, IP/DNS synchronization, unrelated settings and idempotency passed.'

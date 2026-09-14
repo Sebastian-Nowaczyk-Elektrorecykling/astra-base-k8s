@@ -17,34 +17,34 @@ The settings file is a Kustomize patch over the shared defaults. Flux sees one m
 
 ## What to put in settings.yaml
 
-Use **LAN addresses** for the API, DNS and gateway. `Node.status.addresses` calls a node's LAN IP an `InternalIP`; that does **not** mean a Pod or Service address.
+Use a **LAN address** for the API and distinct **off-link service VIPs** for DNS and the gateway. `Node.status.addresses` calls a node's LAN IP an `InternalIP`; that does **not** mean a Pod or Service address.
 
 | Setting | What it means and what to enter |
 | --- | --- |
 | `CLUSTER_NAME` | The directory name, currently `laptops`. Set by the profile creator. |
 | `BASE_CONTRACT_VERSION` | Shared downstream interface version, currently `1`. Maintained by the base; do not override it to imply compatibility. See [the contract](platform-contract.md). |
 | `API_HOST` | Reachable controller LAN IP, initially your working `192.168.2.153`, or a tested stable API VIP/name. No scheme or port. It must be covered by the API certificate. |
-| `LAN_CIDR` | The actual wired LAN subnet and mask, initially `192.168.2.0/24`. The complete L2 service pool must be inside it. |
-| `EDGE_IP` | An unused **LAN virtual IP** for internal HTTPS applications. Cilium advertises it; do not assign it to a laptop interface. |
-| `DNS_IP` | A different unused **LAN virtual IP** for TCP/UDP DNS. This is the DNS server address to put on client machines. |
-| `LB_START`, `LB_STOP` | The start/end of a small LAN range Cilium can allocate. Include the DNS and gateway IPs. Exclude this whole range from DHCP and other static allocations. |
+| `LAN_CIDR` | The actual wired LAN subnet and mask, initially `192.168.2.0/24`. The BGP router and controller peers must be inside it; the service subnet must be outside it. |
+| `EDGE_IP` | An unused **routed virtual IP** for internal HTTPS applications. Cilium advertises it; do not assign it to a laptop interface. |
+| `DNS_IP` | A different unused **routed virtual IP** for TCP/UDP DNS. This is the DNS server address to put on client machines. |
+| `LB_CIDR` | An unused RFC1918 service subnet routed via BGP, e.g. `10.44.0.0/24`. Keep it disjoint from node/client LANs, VPNs and Pod/Service networks. Do not assign it to an interface or DHCP scope. |
+| `LB_START`, `LB_STOP` | Allocation range inside `LB_CIDR`, excluding network/broadcast addresses. Include both VIPs. No DHCP exclusion on the node LAN is needed for this off-link range. |
 | `DNS_CLIENT_CIDR` | The client LAN subnet allowed to query DNS, for example `192.168.2.0/24` **if that is your actual subnet**. |
 | `DNS_UPSTREAMS` | Space-separated upstream DNS server IPs, optionally `IP:port`; for example your router, or `1.1.1.1 9.9.9.9`. No forwarding loop back to this resolver. |
-| `LAN_INTERFACE_REGEX` | Names of the wired node interfaces on which Cilium announces virtual IPs. Inspect `ip -br link`; `^(en.*\|eth.*)$` covers common Ethernet names. |
 | `POD_CIDR` | Cluster-private Pod address range; default for the existing cluster is `10.42.0.0/16`. Keep the value with which k3s was installed. |
 | `SERVICE_CIDR` | Cluster-private Service address range; existing default is `10.43.0.0/16`. Keep the installed value. |
 | `CLUSTER_DNS` | kube-dns's **Service IP**, existing default `10.43.0.10`. This is for pods/k3s, not the DNS address for LAN clients. It must belong to `SERVICE_CIDR`. |
 | `INTERNAL_DOMAIN` | `internal` preserves current names. A second cluster can use `production.internal`, producing `*.hosts.production.internal`, `*.admin.production.internal`, `*.test.production.internal`, etc. |
 | `IDENTITY_HOST` | `keycloak.admin.INTERNAL_DOMAIN` for private access. Existing cluster: `keycloak.admin.internal`. The public-exposure runbook covers changing the canonical issuer later. |
 | `PUBLIC_EDGE_IP` | Leave the shared default `NOT_CONFIGURED` until deliberately enabling the separate public gateway. |
-| `BGP_ENABLED`, `BGP_ROUTER_IP`, `BGP_LOCAL_ASN`, `BGP_PEER_ASN` | Leave shared defaults for ordinary L2 networking. See [optional EdgeRouter BGP](bgp.md) before enabling and adding its separate reconciliation stage. |
+| `BGP_ROUTER_IP`, `BGP_LOCAL_ASN`, `BGP_PEER_ASN` | Actual directly connected LAN router and cluster/router private ASNs. BGP is always enabled and reconciled; see [generated EdgeRouter setup](bgp.md#generate-the-router-setup). |
 | `API_VIP`, `API_VIP_INTERFACE` | Optional kube-vip address and wired interface; set both when enabling the [HA example](high-availability.md#add-controllers). The VIP must be on the LAN and outside the entire Cilium service pool. |
 | `PG_IMAGE` | Shared PostgreSQL image pin; normally leave the default. |
 | `FGA_STORE_ID`, `FGA_MODEL_ID` | Start with the shared `NOT_CONFIGURED` defaults. After initializing OpenFGA **on this cluster**, put its returned IDs in this profile. Do not reuse another cluster's IDs. |
 
-The laptops defaults are internally consistent for **`192.168.2.0/24`**: API `192.168.2.153`, gateway `.240`, DNS `.242`, and pool `.240`–`.249`. Determine your actual subnet with `ip -4 addr` and `ip -4 route`; `192.168.x.x` does not imply a particular mask. For another LAN, change `LAN_CIDR`, `API_HOST`, the pool, both VIPs and `DNS_CLIENT_CIDR` together. Leave the `10.42.0.0/16` Pod and `10.43.0.0/16` Service ranges alone unless they overlap a real VPN/routed network.
+The laptops defaults are internally consistent for **`192.168.2.0/24`**: API `192.168.2.153`, router `192.168.2.1`, gateway `10.44.0.240`, DNS `10.44.0.242`, and pool `10.44.0.240`–`10.44.0.249` inside `LB_CIDR: 10.44.0.0/24`. Determine your actual subnet with `ip -4 addr` and `ip -4 route`; `192.168.x.x` does not imply a particular mask. For another LAN, change `LAN_CIDR`, `API_HOST`, `BGP_ROUTER_IP` and `DNS_CLIENT_CIDR` together; keep or choose a disjoint routed service subnet and VIPs. Leave the `10.42.0.0/16` Pod and `10.43.0.0/16` Service ranges alone unless they overlap a real VPN/routed network.
 
-Use those addresses only after checking that they are free and excluded from DHCP. You do **not** need a DHCP reservation per virtual IP or per worker: exclude one small pool range once. Reserve stable addresses for the control-plane machines/API endpoint. Workers can use ordinary DHCP.
+Use those service addresses only after checking that their subnet is unused throughout your routed networks. They need no DHCP scope or reservation. Reserve stable addresses for the control-plane machines/API endpoint. Workers can use ordinary DHCP.
 
 Do not change a running cluster's Pod CIDR, Service CIDR or kube-dns Service IP to match examples for a new cluster. The configuration validator catches overlaps and addresses in the wrong range; it cannot discover your router's DHCP pool, prove an IP is free, or validate wiring.
 

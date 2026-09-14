@@ -3,19 +3,17 @@
 Use normal Windows DNS and the public certificate of the cluster's private CA. No Kubernetes
 client, browser extension, hosts-file inventory, BGP client or application agent
 is required. Examples use the laptops profile: router `192.168.2.1`, DNS
-`192.168.2.242`, gateway `192.168.2.240`, suffix `internal`. Substitute your actual
+`10.44.0.242`, gateway `10.44.0.240`, suffix `internal`. Substitute your actual
 profile values; Windows addresses remain DHCP-managed.
 
 | Network mode | Windows routing setup | DNS and TLS setup |
 | --- | --- | --- |
-| Default L2, same LAN | Existing DHCP address/mask/gateway | Choose one DNS option below; trust the cluster root once |
-| L2 plus BGP, same LAN | Identical; on-link VIPs still use ARP | Identical |
-| Allowed VLAN/VPN, either mode | Existing gateway/VPN must route to the node LAN; router/firewall must permit access | Prefer conditional DNS through that network's resolver; trust the same root |
+| BGP-only, node LAN | Existing DHCP address/mask/gateway; router learns off-link service `/32`s | Choose one DNS option below; trust the cluster root once |
 
 Do not add persistent `/32` routes to individual laptops. They bypass normal
 failover and become stale. BGP peers are the router and controllers; Windows
-does not participate. [The L2/BGP guide](bgp.md#l2-and-bgp-together-on-this-lan)
-explains the two paths and their failure behavior. Overlapping home/VPN subnets,
+does not participate. [The BGP guide](bgp.md#address-plan)
+explains the routed service subnet and failure behavior. Overlapping home/VPN subnets,
 guest-Wi-Fi isolation or a VPN that denies LAN access require a network fix;
 DNS and certificates cannot supply missing reachability.
 
@@ -55,7 +53,7 @@ Get-DnsClientNrptPolicy -Effective
 Get-DnsClientNrptRule | Format-List Name, Namespace, NameServers, Comment
 
 # Run once, only after checking there is no conflicting rule for this suffix.
-Add-DnsClientNrptRule -Namespace '.internal' -NameServers '192.168.2.242' -Comment 'Elektro laptops internal DNS'
+Add-DnsClientNrptRule -Namespace '.internal' -NameServers '10.44.0.242' -Comment 'Elektro laptops internal DNS'
 Clear-DnsClientCache
 Get-DnsClientNrptPolicy -Effective
 ```
@@ -149,8 +147,8 @@ Run these in ordinary PowerShell after DNS/trust configuration:
 
 ```powershell
 # Direct service tests: bypass normal resolver selection, useful for diagnosis.
-Resolve-DnsName grafana.admin.internal -Server 192.168.2.242 -Type A -DnsOnly
-Resolve-DnsName grafana.admin.internal -Server 192.168.2.242 -Type A -DnsOnly -TcpOnly
+Resolve-DnsName grafana.admin.internal -Server 10.44.0.242 -Type A -DnsOnly
+Resolve-DnsName grafana.admin.internal -Server 10.44.0.242 -Type A -DnsOnly -TcpOnly
 # Effective Windows resolver: omit -Server to exercise DHCP/NRPT configuration.
 Resolve-DnsName grafana.admin.internal -Type A -DnsOnly
 [System.Net.Dns]::GetHostAddresses('keycloak.admin.internal')
@@ -177,7 +175,7 @@ a permission denial after valid TLS is separate from a network failure.
 | Untrusted certificate | Correct root fingerprint and Windows account/store, complete served chain, browser OS-root policy |
 | Wrong-name or expired certificate | Use the hostname rather than the VIP; check Windows time and cert-manager Certificate status |
 | `foo.internal` fails TLS while admin/test names work | Add its exact SAN to the base certificate; `*.internal` is rejected by common clients ([procedure](tls.md#exact-names-for-applications-directly-under-internal)) |
-| Same-LAN access works, router/routed access fails with BGP | Selected `/32` next hop, negotiated hold time, stale routes and router firewall |
+| DNS and HTTPS VIPs are unreachable | Off-link service subnet, client default gateway, established BGP `/32` next hop and LAN router firewall |
 | Router DNS fails but direct DNS works | Conditional rule, DNS rebind checks, router source address and its BGP route |
 
 An unmodified browser using system/default local-compatible DNS works with this
@@ -193,6 +191,6 @@ describe these limits. This base exposes plain LAN DNS on TCP/UDP 53, not a DoH
 endpoint; do not configure `https://dns.admin.internal/dns-query` in a browser.
 
 For a pilot, verify both the default installed browser and any company-managed
-browser/VPN combination. For BGP acceptance, also test the router or an allowed
-routed client: a browser on the VIP's subnet usually exercises L2 alone. No
+browser/VPN combination. For BGP acceptance, check the router's selected `/32` next hop while testing
+from a node-LAN client; all service VIP access now uses routing. No
 Windows or physical EdgeRouter execution is performed by repository CI.

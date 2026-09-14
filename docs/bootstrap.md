@@ -13,14 +13,14 @@ Reserve, for example:
 | Initial controller k8s1 | Stable `192.168.2.153`; workers may use ordinary DHCP |
 | Initial Kubernetes API | `192.168.2.153:6443` |
 | Optional future API VIP | `192.168.2.10` (outside service pool) |
-| Cilium service pool | `192.168.2.240`–`.249`, outside DHCP |
-| Gateway IP | `192.168.2.240` |
-| LAN DNS IP | `192.168.2.242` (distinct IP within the excluded service pool) |
+| Cilium service pool | `10.44.0.240`–`.249` in routed `LB_CIDR: 10.44.0.0/24` |
+| Gateway IP | `10.44.0.240` |
+| LAN DNS IP | `10.44.0.242` (distinct IP within the routed service pool) |
 | Application DNS | `*.internal`, `*.admin.internal`, `*.test.internal`, `*.staging.internal` → private gateway IP |
 | Machine DNS | `NODE.hosts.internal` → each registered node's reported LAN IP, discovered automatically |
 | Pod / Service CIDRs | `10.42.0.0/16` / `10.43.0.0/16` |
 
-Change the LAN addresses in `clusters/laptops/settings.yaml`; [the settings reference](clusters.md#what-to-put-in-settingsyaml) explains every field. These examples must match your actual subnet. Keep `INTERNAL_DOMAIN: internal`, `IDENTITY_HOST: keycloak.admin.internal` and the shared `PUBLIC_EDGE_IP: NOT_CONFIGURED` default for the private setup. Configure the [LAN DNS service](dns.md), including `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS`; no node inventory is needed. Set the real interface regex for L2 announcements (`ip -br link`), not a guessed Wi-Fi interface. Keep working external DNS during bootstrap; after Flux starts CoreDNS, point client machines at `DNS_IP`. Keep cluster hosts' bootstrap DNS independent as explained in the DNS runbook. L2 requires a shared broadcast domain and ARP announcements to pass; wireless client isolation often breaks it. The [EdgeRouter guide](bgp.md) gives the minimum router setup and an optional BGP configuration. BGP is disabled by default.
+Change the LAN addresses in `clusters/laptops/settings.yaml`; [the settings reference](clusters.md#what-to-put-in-settingsyaml) explains every field. These examples must match your actual subnet. Keep `INTERNAL_DOMAIN: internal`, `IDENTITY_HOST: keycloak.admin.internal` and the shared `PUBLIC_EDGE_IP: NOT_CONFIGURED` default for the private setup. Configure the [LAN DNS service](dns.md), including `DNS_IP`, `DNS_CLIENT_CIDR` and `DNS_UPSTREAMS`; no node inventory is needed. Set `LB_CIDR` to an unused subnet outside the LAN and Pod/Service ranges and `BGP_ROUTER_IP` to the actual router on the nodes’ LAN. Keep working external DNS during bootstrap; after Flux starts CoreDNS, point client machines at `DNS_IP`. Keep cluster hosts' bootstrap DNS independent as explained in the DNS runbook. L2 announcements are disabled. LAN clients use their existing default gateway to reach the off-link VIPs through BGP; wireless isolation can still block access. Complete [the generated EdgeRouter setup](bgp.md#generate-the-router-setup) before relying on DNS/HTTPS.
 
 Prepare the administrator workstation from a checkout of this repository:
 
@@ -40,6 +40,8 @@ With the workstation tools installed and the tracked settings edited, export the
 ```sh
 mkdir -p local
 bash scripts/configure-cluster.sh --export laptops > local/cluster.env
+python3 scripts/configure-bgp.py laptops --node-ip 192.168.2.153 > local/edgerouter-bgp.txt
+# Review and apply the router snippet using docs/bgp.md before service acceptance.
 ```
 
 Copy this env file to each node. All servers must receive identical critical k3s options. CIDRs must not overlap LAN/VPN networks. Do not change them on a running cluster. For a second cluster, [create its own profile](clusters.md#create-a-second-profile) and use its name in the export command; do not copy another cluster's secrets or generated Flux sync.
