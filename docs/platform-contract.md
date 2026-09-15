@@ -93,7 +93,7 @@ operator/CRD stage before a new Helm chart's custom resources. HelmRelease Ready
 does not necessarily mean its operator-managed database/workload is Ready; wait
 on the resources consumers actually need. The starter adds explicit HTTPRoute
 Accepted/ResolvedRefs checks. None of these readiness conditions creates users,
-callbacks, OpenFGA store/model IDs or grants. Finish base bootstrap part 5 before
+callbacks, OpenFGA store/model IDs or grants. Finish the [base login and permission setup](bootstrap.md#6-trust-tls-initialize-permissions-log-in) before
 expecting application access.
 
 ## Settings, names and APIs
@@ -230,7 +230,7 @@ an OIDC HTTP endpoint.
 
 BGP supplies private service routing through the directly connected node LAN router. L2 announcements are disabled; `EDGE_IP` and `DNS_IP` belong to an off-link `LB_CIDR`. The base advertises only those two service host routes with `no-advertise` and excludes the public gateway. Existing L2 deployments need the coordinated [address/router/DNS migration](bgp.md#migrate-an-existing-l2-installation). A public alias
 requires the separate public gateway/IP/certificate, approved exact route and
-AuthConfig host, callback/grant, reachable canonical issuer, external DNS and
+AuthConfig host, callback/grant, reachable canonical issuer, the opt-in public Service BGP advertisement/router filter, external DNS and
 deliberate firewall/NAT action. Follow [public exposure](../examples/public-exposure/README.md).
 Internal and public hostnames are separate FGA objects even when sharing a backend.
 Do not forward the private gateway from the Internet or place infrastructure

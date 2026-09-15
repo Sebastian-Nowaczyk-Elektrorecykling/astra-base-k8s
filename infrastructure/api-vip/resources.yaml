@@ -1,3 +1,5 @@
+# Opt-in ARP-based API HA only. The BGP-only base never reconciles this directory.
+# Use an external TCP load balancer for API HA without virtual-IP ARP announcements.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

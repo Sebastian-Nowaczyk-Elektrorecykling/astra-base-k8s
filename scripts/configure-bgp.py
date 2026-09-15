@@ -51,7 +51,7 @@ def discover_nodes(settings):
     return addresses
 
 
-def router_config(settings, addresses, dns_forwarding=False):
+def router_config(settings, addresses, dns_forwarding=False, *, router_id=None, include_public=False):
     validator.validate(settings)
     lan = ipaddress.IPv4Network(settings['LAN_CIDR'])
     nodes = [ipaddress.IPv4Address(address) for address in addresses]
@@ -65,24 +65,36 @@ def router_config(settings, addresses, dns_forwarding=False):
     name = 'ELEKTRO-' + settings['CLUSTER_NAME'].upper()
     local_asn, peer_asn = int(settings['BGP_LOCAL_ASN']), int(settings['BGP_PEER_ASN'])
     router = settings['BGP_ROUTER_IP']
+    if router_id is not None:
+        router_id = ipaddress.IPv4Address(router_id)
+        if router_id.is_unspecified or router_id.is_multicast or int(router_id) == 0xffffffff:
+            raise ValueError('Router ID must be a nonzero unicast IPv4 address')
+    if dns_forwarding and ipaddress.IPv4Address(router) not in ipaddress.IPv4Network(settings['DNS_CLIENT_CIDR']):
+        raise ValueError('Router DNS forwarding requires BGP_ROUTER_IP inside DNS_CLIENT_CIDR')
+    routes = [(10, 'EDGE_IP'), (20, 'DNS_IP')]
+    if include_public:
+        if settings['PUBLIC_EDGE_IP'] == 'NOT_CONFIGURED' or settings['IDENTITY_HOST'].endswith('.internal'):
+            raise ValueError('--include-public requires PUBLIC_EDGE_IP and a public IDENTITY_HOST; follow the public-exposure runbook')
+        routes.append((30, 'PUBLIC_EDGE_IP'))
     lines = [
         '# Generated from clusters/' + settings['CLUSTER_NAME'] + '/settings.yaml.',
         '# Verify stable controller leases, existing BGP ASN/router-id and policy names.',
         '# Review compare; then run commit; save; exit in the router CLI.',
         'configure',
     ]
-    for rule, key in ((10, 'EDGE_IP'), (20, 'DNS_IP')):
+    for rule, key in routes:
         lines += [f'set policy prefix-list {name}-IN rule {rule} action permit',
                   f"set policy prefix-list {name}-IN rule {rule} prefix {settings[key]}/32"]
     lines += [f'set policy prefix-list {name}-OUT rule 10 action deny',
               f'set policy prefix-list {name}-OUT rule 10 prefix 0.0.0.0/0',
-              f'set policy prefix-list {name}-OUT rule 10 le 32',
-              f'set protocols bgp {peer_asn} parameters router-id {router}']
+              f'set policy prefix-list {name}-OUT rule 10 le 32']
+    if router_id is not None:
+        lines.append(f'set protocols bgp {peer_asn} parameters router-id {router_id}')
     for node in sorted(nodes):
         prefix = f'set protocols bgp {peer_asn} neighbor {node}'
         lines += [f'{prefix} remote-as {local_asn}', f'{prefix} passive',
                   f'{prefix} prefix-list import {name}-IN',
-                  f'{prefix} prefix-list export {name}-OUT', f'{prefix} maximum-prefix 2']
+                  f'{prefix} prefix-list export {name}-OUT', f'{prefix} maximum-prefix {len(routes)}']
     if dns_forwarding:
         lines.append(f"set service dns forwarding options server=/{settings['INTERNAL_DOMAIN']}/{settings['DNS_IP']}")
     lines.append('compare')
@@ -96,10 +108,13 @@ def main():
     peers.add_argument('--node-ip', action='append', help='Stable controller IPv4; repeat for HA; no cluster access')
     peers.add_argument('--discover', action='store_true', help='Read controller InternalIPs from the checked kubeconfig')
     parser.add_argument('--dns-forwarding', action='store_true', help='Include suffix forwarding; enable only after DNS acceptance')
+    parser.add_argument('--router-id', help='Explicitly set the global EdgeOS router ID; omitted by default to preserve existing BGP')
+    parser.add_argument('--include-public', action='store_true', help='Include the separately enabled public gateway /32 and raise the prefix limit')
     args = parser.parse_args()
     settings = profile_settings(args.cluster)
     addresses = discover_nodes(settings) if args.discover else args.node_ip
-    print(router_config(settings, addresses, args.dns_forwarding), end='')
+    print(router_config(settings, addresses, args.dns_forwarding,
+                        router_id=args.router_id, include_public=args.include_public), end='')
 
 
 if __name__ == '__main__':

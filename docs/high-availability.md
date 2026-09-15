@@ -15,20 +15,39 @@ A dedicated controller is not an agentless k3s server: Cilium still needs a node
 The initial `--cluster-init` chooses embedded etcd on day one. One controller works. Three controllers tolerate one controller failure; **two do not tolerate either member failing**. Add the second and third in a planned window and do not leave the cluster at two members. Kubernetes control-plane HA is separate from application/storage HA.
 
 1. Save an etcd snapshot and copy it off the cluster together with the k3s server token. Verify reliable SSDs and stable wired connectivity on all proposed servers.
-2. Give the API a stable endpoint. Use an existing external TCP load balancer, or the optional upstream kube-vip configuration under `infrastructure/api-vip`. kube-vip is for the API only; Cilium continues to manage application load-balancer IPs. The API VIP must be outside Cilium's pool.
-3. For kube-vip, set `API_VIP` and `API_VIP_INTERFACE` in the cluster settings. The interface name must exist on every participating controller; use per-node variants if NIC names differ. Add `examples/api-vip-reconciliation.yaml` to the cluster's reconciliation resources. Keep `API_HOST` pointing to k8s1 until the VIP is working. kube-vip uses host networking and the local API endpoint, so it does not need the Cilium Service VIP to elect a leader.
-4. Add the VIP/DNS name to `tls-san` in `/etc/rancher/k3s/config.yaml` on the existing server, retaining its old SAN. Restart k3s in the maintenance window. Verify `kubectl` against the VIP with certificate validation enabled. For a DNS name, add both the name and VIP when you need both access forms.
-5. Change `API_HOST` in workstation/host `local/cluster.env` and the admin kubeconfig. Run `bash scripts/configure-cluster.sh local/cluster.env` on the workstation to update the GitOps settings, then commit and push `clusters/laptops/settings.yaml`. Let Cilium reconcile its direct API endpoint and verify it before joining further servers. Keep the old endpoint reachable until the Cilium rollout finishes; do not use the bootstrap Helm script once Flux owns the release.
-6. On each **fresh** added server, run host preparation and join with the **server token**, using `--role controller` or `--role hybrid` and `--server https://API_ENDPOINT:6443`. Do not pass `--init` again. Apply the same k3s version, disabled components, CIDRs, DNS, secret encryption and egress-selector settings.
-7. Confirm all three server nodes and etcd members are healthy. Test one server down at a time; restore quorum before the next test. Existing agents learn server endpoints after registration, but newly joining agents and off-cluster clients still need a reachable initial endpoint.
-
-The kube-vip DaemonSet has NET_ADMIN/NET_RAW on control-plane hosts and is therefore an explicitly trusted infrastructure component. It is optional, pinned upstream software. Test ARP failover on your actual switch; a manifest render cannot prove that your LAN permits VIP takeover. This API-only example still uses ARP. For a setup without any ARP virtual-IP announcements, use an existing external TCP load balancer instead.
+2. Give the API a stable endpoint through an existing external TCP load balancer forwarding to healthy servers on TCP 6443. Keep its address outside `LB_CIDR`; the Cilium BGP service routes do not provide an API endpoint. Choose a load-balancer setup that does not itself rely on ARP VIP announcements if that is a requirement for the whole LAN. Keep `API_HOST` pointing to k8s1 until the new endpoint is verified.
+3. Add the endpoint IP/DNS name to `tls-san` in `/etc/rancher/k3s/config.yaml` on the existing server, retaining its old SAN. Restart k3s in the maintenance window. Verify `kubectl` against the new endpoint with certificate validation enabled. For a DNS name, add both the name and IP when you need both access forms.
+4. Change `API_HOST` in workstation/host `local/cluster.env` and the admin kubeconfig. Run `bash scripts/configure-cluster.sh local/cluster.env` on the workstation to update the GitOps settings, then commit and push `clusters/laptops/settings.yaml`. Let Cilium reconcile its direct API endpoint and verify it before joining further servers. Keep the old endpoint reachable until the Cilium rollout finishes; do not use the bootstrap Helm script once Flux owns the release.
+5. On each **fresh** added server, reserve a stable LAN IP, run host preparation and join with the **server token**, using `--role controller` or `--role hybrid` and `--server https://API_ENDPOINT:6443`. Do not pass `--init` again. Apply the same k3s version, disabled components, CIDRs, DNS, secret encryption and egress-selector settings. Add the healthy server to the external API load balancer.
+6. Confirm all three server nodes and etcd members are healthy. Complete the BGP peer setup below, then test one server down at a time; restore quorum before the next test. Existing agents learn server endpoints after registration, but newly joining agents and off-cluster clients still need a reachable initial endpoint.
 
 Private DNS/gateway reachability uses BGP from controller peers. After adding stable
 controllers, regenerate the [EdgeRouter configuration](bgp.md#generate-the-router-setup)
 with `python3 scripts/configure-bgp.py laptops --discover`, review and apply their
 new neighbor entries, and verify both service routes before relying on failover.
 Workers need no BGP neighbors. Retired controller neighbors must be removed explicitly.
+
+## Optional ARP API VIP
+
+`infrastructure/api-vip` and `examples/api-vip-reconciliation.yaml` retain an
+explicitly optional kube-vip API HA example. It is **not part of the BGP-only
+base** and still announces the API VIP using ARP. Enabling it is a deliberate
+exception; leave it unattached when virtual-IP L2 announcements must stay disabled.
+Cilium's service and pod announcement settings remain disabled independently.
+
+If choosing this exception, set both `API_VIP` and `API_VIP_INTERFACE` in the
+profile. Reserve a free address inside `LAN_CIDR`, separate from the router,
+physical nodes and all service VIPs. The interface must exist on every
+participating controller; differing NIC names need a reviewed per-node variant.
+Copy the example Flux Kustomization into `clusters/NAME` and reference that file
+in its root Kustomization. Keep `API_HOST` on the working controller until the
+VIP is verified, then use the SAN/API endpoint migration steps above. kube-vip
+uses host networking and each controller's local API for leader election.
+
+The DaemonSet has NET_ADMIN/NET_RAW on control-plane hosts and is trusted
+infrastructure. Test ARP takeover on the actual LAN during an approved HA window;
+a manifest render cannot establish switch behavior. This API mechanism provides
+no fallback for the BGP-routed DNS/gateway Services.
 
 ## Reusing k8s2 and k8s3 as hybrids
 

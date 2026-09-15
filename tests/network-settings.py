@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Catch LAN/pool mistakes before bootstrap and bound BGP-only exposure."""
 import importlib.util
+import ipaddress
 from pathlib import Path
+import re
 
 import yaml
 
@@ -57,10 +59,14 @@ rejected(API_HOST='127.0.0.1')
 rejected(API_HOST='0.0.0.0')
 rejected(API_VIP='10.44.0.245', API_VIP_INTERFACE='eth0')
 rejected(API_VIP='192.168.2.10')
+rejected(API_VIP=settings['BGP_ROUTER_IP'], API_VIP_INTERFACE='eth0')
+rejected(API_VIP_INTERFACE='eth0')
 module.validate({**settings, 'API_VIP': '192.168.2.10', 'API_VIP_INTERFACE': 'eth0'})
 rejected(POD_CIDR='192.168.0.0/16')
 rejected(SERVICE_CIDR='192.168.2.0/24', CLUSTER_DNS='192.168.2.10')
 rejected(BGP_ENABLED='false')
+rejected(BGP_ENABLED='true')
+rejected(LAN_INTERFACE_REGEX='eth.*')
 for router in ('NOT_CONFIGURED', '192.168.50.1', '192.168.2.0', '192.168.2.255', '192.168.2.153'):
     rejected(BGP_ROUTER_IP=router)
 rejected(BGP_PEER_ASN='64513')
@@ -93,6 +99,51 @@ assert not advertised('envoy-gateway-system', 'envoy-public', **{
 assert not advertised('kube-system', 'kube-dns')
 assert not advertised('app-demo', 'lan-dns')
 assert not advertised('monitoring', 'grafana')
+
+# The peer accepts the separately attached public advertisement, without adding
+# it to the base or letting its selector match another gateway/DNS Service.
+public = yaml.safe_load((ROOT / 'examples/public-exposure/bgp/resources.yaml').read_text())
+selected = peer['spec']['families'][0]['advertisements']['matchLabels']
+for obj in (advertisement, public):
+    assert all(obj['metadata']['labels'].get(k) == v for k, v in selected.items())
+public_rules = public['spec']['advertisements']
+assert len(public_rules) == 1
+assert public_rules[0]['selector'] == {'matchLabels': {
+    'io.kubernetes.service.namespace': 'envoy-gateway-system',
+    'gateway.envoyproxy.io/owning-gateway-namespace': 'edge',
+    'gateway.envoyproxy.io/owning-gateway-name': 'public'}}
+assert public_rules[0]['attributes']['communities']['wellKnown'] == ['no-advertise']
+assert public_rules[0]['service']['addresses'] == ['LoadBalancerIP']
+public_stage = next(obj for obj in yaml.safe_load_all((ROOT / 'examples/public-exposure/reconciliation.yaml').read_text())
+                    if obj['metadata']['name'] == 'public-bgp')
+assert {d['name'] for d in public_stage['spec']['dependsOn']} == {'bgp', 'public-edge'}
+assert public_stage['spec']['prune'] is True and public_stage['spec']['wait'] is False
+assert not any('public-exposure' in p.read_text() or 'api-vip' in p.read_text()
+               for p in (ROOT / 'clusters/base').rglob('*.yaml'))
+
+# Validate the actual documented same-LAN profiles, including cross-cluster
+# address overlap, so on-link/DHCP examples cannot silently return.
+section = (ROOT / 'docs/clusters.md').read_text().split('## Two clusters on the same LAN')[1]
+examples = [dict(settings), {**settings, 'CLUSTER_NAME': 'production',
+                           'INTERNAL_DOMAIN': 'production.internal',
+                           'IDENTITY_HOST': 'keycloak.admin.production.internal'}]
+for line in section.splitlines():
+    if not line.startswith('| `'):
+        continue
+    columns = line.split('|')[1:-1]
+    keys = re.findall(r'`([A-Z_]+)`', columns[0])
+    for example, column in zip(examples, columns[1:]):
+        values = re.findall(r'`([^`]+)`', column)
+        if len(values) == 1:
+            values *= len(keys)
+        assert len(keys) == len(values)
+        example.update(zip(keys, values))
+for example in examples:
+    module.validate(example)
+networks = [ipaddress.IPv4Network(e[key]) for e in examples
+            for key in ('LB_CIDR', 'POD_CIDR', 'SERVICE_CIDR')]
+assert all(not left.overlaps(right) for i, left in enumerate(networks) for right in networks[i + 1:])
+assert examples[0]['BGP_LOCAL_ASN'] != examples[1]['BGP_LOCAL_ASN']
 
 # Controller peers may forward to backends on workers; preserve Cluster/SNAT.
 cilium = yaml.safe_load((ROOT / 'infrastructure/cilium/values.yaml').read_text())

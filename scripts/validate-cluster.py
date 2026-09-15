@@ -18,6 +18,7 @@ def validate(data):
         return ip
 
     assert re.fullmatch(label, data['CLUSTER_NAME']) and data['CLUSTER_NAME'] != 'base', 'Invalid CLUSTER_NAME'
+    assert 'BGP_ENABLED' not in data and 'LAN_INTERFACE_REGEX' not in data, 'Remove retired BGP_ENABLED and LAN_INTERFACE_REGEX settings; BGP is always enabled and L2 is disabled'
     domain = data['INTERNAL_DOMAIN']
     assert hostname(domain) and (domain == 'internal' or domain.endswith('.internal')), 'INTERNAL_DOMAIN must be internal or a subdomain of it'
     assert hostname(data['API_HOST']), 'API_HOST must be a bare IPv4 address or DNS name'
@@ -63,6 +64,9 @@ def validate(data):
         assert lan.network_address < api_vip < lan.broadcast_address, 'The optional ARP API VIP must be inside LAN_CIDR'
         assert not start <= api_vip <= stop, 'API_VIP must be outside the entire service pool'
         assert data.get('API_VIP_INTERFACE'), 'Configure API_VIP_INTERFACE with the optional API VIP'
+        assert api_vip != address('BGP_ROUTER_IP'), 'The optional API VIP must not duplicate the LAN router address'
+    else:
+        assert 'API_VIP_INTERFACE' not in data, 'API_VIP_INTERFACE requires an API_VIP'
     upstreams = data['DNS_UPSTREAMS'].split()
     assert 1 <= len(upstreams) <= 15, 'Configure between one and fifteen DNS upstreams'
     for upstream in upstreams:
@@ -71,7 +75,6 @@ def validate(data):
         assert not (ip.is_loopback or ip.is_unspecified or ip.is_multicast), 'Use reachable upstream DNS IPs'
         assert ip not in vips and ip not in service, 'DNS must not forward back to itself or cluster DNS'
         assert len(parts) == 1 or (len(parts) == 2 and 0 < int(parts[1]) < 65536), 'Invalid upstream DNS port'
-    assert data.get('BGP_ENABLED', 'true') == 'true', 'BGP is required; remove the retired BGP_ENABLED setting'
     router = address('BGP_ROUTER_IP')
     assert lan.network_address < router < lan.broadcast_address, 'The BGP router must be on the directly connected LAN'
     assert router != api, 'The BGP router and API endpoint must differ'

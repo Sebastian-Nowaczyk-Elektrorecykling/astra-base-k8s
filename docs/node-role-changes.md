@@ -27,9 +27,16 @@ kubectl get nodes -o wide
 
 Use an SSH account that already has root access, or noninteractive `sudo -n` access. The examples use `root@k8s2.hosts.internal`; substitute your actual SSH account or configured SSH host alias. If your resolver is not configured, use the node's actual LAN address. Connect normally once to verify the SSH host key. The scripts use SSH keys/BatchMode and normal host-key checking; they do not collect passwords or configure SSH/sudo. Verify the Kubernetes Node name and the SSH target: the script compares the node's machineID with `/etc/machine-id` before host operations.
 
-A server being **removed** must have another healthy server. Move your kubeconfig, `local/cluster.env` / tracked `API_HOST`, and the live Cilium API endpoint to a surviving server or tested API VIP first. Follow [API endpoint migration](high-availability.md#add-controllers). The removal checks reject the target's own address, loopback endpoints, unhealthy servers and a still-unrolled Cilium change. Agent join addresses in local configuration should also point at the surviving endpoint for subsequent reconnects/installations.
+A server being **removed** must have another healthy server. Move your kubeconfig, `local/cluster.env` / tracked `API_HOST`, and the live Cilium API endpoint to a surviving server or tested external API endpoint first. Follow [API endpoint migration](high-availability.md#add-controllers). The removal checks reject the target's own address, loopback endpoints, unhealthy servers and a still-unrolled Cilium change. Agent join addresses in local configuration should also point at the surviving endpoint for subsequent reconnects/installations.
 
 The last server cannot become a worker without adding a replacement first. It **can** switch between hybrid and controller without removing etcd, provided another node can host its workloads. With two etcd members, both must remain online until membership is reduced; the script requests retirement through k3s before stopping the selected server. Three → two loses failure tolerance. Restore three for HA, or deliberately finish a planned reduction to one; do not mistake two for HA.
+
+Before removing a controller, verify another stable controller has an established
+BGP session and the router has both private service `/32`s through that survivor.
+The maintenance helpers do not check BGP or edit router configuration. Keep a
+working numeric API/SSH path independent of cluster DNS; there is no L2 fallback.
+After retirement, explicitly remove that node's router neighbor. A role change
+between hybrid and dedicated controller at the same IP keeps its BGP peer.
 
 ## Worker ↔ server: remove and rejoin
 
@@ -63,7 +70,7 @@ sudo reboot
 
 The fresh-node installer checks a boot-ID marker and refuses a same-boot rejoin after removal. Reuse the checkout and `local/cluster.env` on that machine. Confirm the same k3s pin and cluster-critical settings as the existing servers. Securely copy the **surviving server's** join token into a root-readable file outside `/var/lib/rancher/k3s`, for example `/root/k3s-join-token`. A server token is required for a hybrid/controller; an agent-only token suffices for a worker.
 
-Choose exactly one of these commands on the machine, using its actual IP and a surviving server/API VIP:
+Choose exactly one of these commands on the machine, using its actual IP and a surviving server or tested external API endpoint:
 
 ```sh
 # Hybrid server, with workload capacity:
@@ -83,6 +90,11 @@ sudo bash scripts/install-k3s.sh --role worker --name k8s2 --ip 192.168.2.154 \
 ```
 
 Use `k8s1.hosts.internal` only if k8s1 survives and its API certificate contains that SAN. Otherwise use the already verified API address from your kubeconfig. Never use `--init` on a rejoining machine. Debian preparation, Cilium Helm bootstrap and Flux bootstrap do not need to be repeated. The existing Cilium/Flux controllers configure the returning node automatically.
+
+For a new or readdressed controller/hybrid, reserve its LAN IP and regenerate
+`python3 scripts/configure-bgp.py laptops --discover` with the verified kubeconfig.
+Review/apply its router neighbor and confirm both service routes before relying
+on it or starting another migration. Workers require no BGP neighbor.
 
 Deleting a Node removes labels/taints that were only stored on that Kubernetes object. The installer recreates the chosen role labels. Restore intended GPU and application-specific labels/taints from your inventory, excluding old k3s control-plane/etcd annotations. For an NVIDIA workload node, reapply `elektro.local/gpu-vendor=nvidia` and run the existing GPU smoke test. The driver/toolkit remain installed and k3s rediscovers `nvidia-container-runtime` at startup.
 

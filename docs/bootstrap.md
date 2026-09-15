@@ -12,8 +12,8 @@ Reserve, for example:
 | --- | --- |
 | Initial controller k8s1 | Stable `192.168.2.153`; workers may use ordinary DHCP |
 | Initial Kubernetes API | `192.168.2.153:6443` |
-| Optional future API VIP | `192.168.2.10` (outside service pool) |
-| Cilium service pool | `10.44.0.240`–`.249` in routed `LB_CIDR: 10.44.0.0/24` |
+| Future HA API endpoint | Existing external TCP load balancer, separate from the Cilium service subnet |
+| Cilium service pool | `10.44.0.240`–`10.44.0.249` in routed `LB_CIDR: 10.44.0.0/24` |
 | Gateway IP | `10.44.0.240` |
 | LAN DNS IP | `10.44.0.242` (distinct IP within the routed service pool) |
 | Application DNS | `*.internal`, `*.admin.internal`, `*.test.internal`, `*.staging.internal` → private gateway IP |
@@ -35,7 +35,7 @@ The installer supports Debian 12/13 on amd64 and arm64. It installs Git, the SSH
 
 The script prepares administration tools only. Cluster-node preparation remains `scripts/prepare-debian.sh`; workstation installation does not configure kubeconfig, generate credentials, change swap, install a container runtime or join a cluster.
 
-With the workstation tools installed and the tracked settings edited, export the shared bootstrap values:
+With the workstation tools installed and the tracked settings edited, export the shared bootstrap and LAN/BGP values:
 
 ```sh
 mkdir -p local
@@ -99,7 +99,7 @@ kubectl get nodes -o wide
 
 The normal Helm release is installed once to solve the CNI/bootstrap dependency. Flux later reconciles that same release, namespace, version and shared values file. There is no k3s HelmChart resource racing Flux. Do not re-enable Flannel, kube-proxy, Traefik, ServiceLB or local-path storage.
 
-Review the settings file and include it in the commit below. Flux cannot read your ignored `local/cluster.env`: it uses the merged tracked settings ConfigMap. Prefer editing the profile and re-exporting its env. For an existing env file, `bash scripts/configure-cluster.sh local/cluster.env` imports its API, Pod/Service networks, kube-dns IP and private suffix into the selected profile; review, commit and push that change. Load-balancer/DNS values remain in `settings.yaml` unless explicitly included in that trusted env file. The exported file must include `CLUSTER_NAME` and `INTERNAL_DOMAIN`.
+Review the settings file and include it in the commit below. Flux cannot read your ignored `local/cluster.env`: it uses the merged tracked settings ConfigMap. Prefer editing the profile and re-exporting its env. For an existing env file, `bash scripts/configure-cluster.sh local/cluster.env` imports its API, Pod/Service networks, kube-dns IP and private suffix into the selected profile; review, commit and push that change. New exports also include LAN/BGP, load-balancer and DNS settings; importing them updates the same tracked profile. Re-export after an intentional change so `--check` catches stale values. The exported file must include `CLUSTER_NAME` and `INTERNAL_DOMAIN`.
 
 If Flux already manages Cilium, the bootstrap script stops before running Helm against that managed release. For an API endpoint change, use the [HA runbook](high-availability.md#add-controllers).
 
@@ -132,7 +132,7 @@ A fresh or cleared profile may have no `flux-system/` directory, or an empty one
 
 When `flux-system/` already contains files, the wrapper validates the existing Kustomization before installation. Keep references to both `gotk-components.yaml` and `gotk-sync.yaml`, following [Flux bootstrap customization](https://fluxcd.io/flux/installation/configuration/bootstrap-customization/). An incomplete customization must be repaired and committed; do not add an empty `kustomization.yaml` as a placeholder. Customizations and the clean/pushed-configuration checks remain in effect during retries.
 
-Flux starts prerequisites before consumers. `foundation → cilium → controllers → admission → storage → databases → identity/authorization → edge → access → routes` is the main chain; certificates and secrets have their own prerequisites. Helm installation/remediation uses upstream chart jobs and service accounts without a handcrafted fixup controller.
+Flux starts prerequisites before consumers. `foundation → cilium → controllers → admission → storage → databases → identity/authorization → edge → access → routes` is the main chain; certificates and secrets have their own prerequisites. `network` follows Cilium and feeds the independent `bgp` and `dns` stages; `cluster-dns` follows `dns`. Helm installation/remediation uses upstream chart jobs and service accounts without a handcrafted fixup controller.
 
 ```sh
 flux get kustomizations
@@ -142,7 +142,33 @@ kubectl get clusters.postgresql.cnpg.io -A
 
 Empty/missing secrets leave dependent pods unready. Missing FGA store/model IDs leave application authorization denied; they never grant access. First reconciliation can take several minutes for images, volumes and the databases.
 
-## 5. Trust TLS, initialize permissions, log in
+## 5. Verify BGP and LAN DNS
+
+Before changing client DNS or attempting browser login, complete the
+[BGP acceptance checks](bgp.md#addresses-dns-and-acceptance). Both L2 announcement
+features must be disabled, controller sessions established, and the router must
+select the private DNS/gateway `/32`s via stable controller IPs. Ready nodes and
+a green Flux stage do not prove those routes exist.
+
+From a client on the node LAN, verify the assigned service addresses and test
+both DNS transports using the profile's actual values:
+
+```sh
+kubectl -n kube-system get service lan-dns -o wide
+kubectl -n envoy-gateway-system get services -o wide
+dig @10.44.0.242 grafana.admin.internal A +short
+dig @10.44.0.242 grafana.admin.internal A +short +tcp
+dig @10.44.0.242 k8s1.hosts.internal A +short
+```
+
+Expect the gateway VIP for Grafana and the physical LAN IP for the node. Then
+configure [router suffix forwarding](dns.md#edgerouter-conditional-forwarding),
+test through the router, and keep clients on router DNS. Direct-DNS clients must
+use the full routed `DNS_IP`, not an old on-link address. Keep the nodes' external
+bootstrap DNS and direct API access working independently of the cluster.
+There is no L2 fallback if BGP or the router fails.
+
+## 6. Trust TLS, initialize permissions, log in
 
 The default cert-manager issuer creates a private root and a certificate with all four internal application wildcards, including the administration group. Export **only its public certificate**:
 
@@ -164,14 +190,15 @@ Configure your existing host/router firewall; the preparation script does not re
 | Port/protocol | Source → destination |
 | --- | --- |
 | TCP 22 | Admin network → nodes |
-| TCP 6443 | Admins and all nodes → server nodes / API VIP |
+| TCP 6443 | Admins and all nodes → server nodes / tested API endpoint |
+| TCP 179 | Stable controller/hybrid LAN IPs → `BGP_ROUTER_IP`, with established return traffic |
 | TCP 2379–2380 | Server nodes ↔ server nodes |
 | TCP 10250 | Trusted cluster nodes → kubelets |
 | UDP 8472 | Cluster nodes ↔ cluster nodes, Cilium VXLAN |
 | UDP 51871 | Cluster nodes ↔ cluster nodes, Cilium WireGuard |
 | TCP 4240, ICMP | Cluster nodes ↔ cluster nodes, Cilium health |
 | TCP 4244 | Hubble relay / trusted nodes → Cilium agents |
-| TCP 443 | LAN/VPN clients → private `EDGE_IP`; Internet clients → separate `PUBLIC_EDGE_IP` only after explicit opt-in |
+| TCP 443 | Node LAN clients → routed private `EDGE_IP`; other networks/public gateway only after separate explicit opt-in |
 | TCP/UDP 53 | Trusted LAN → `DNS_IP`; DNS pods → configured upstream resolvers |
 | DNS/NTP/HTTPS egress | Nodes/pods → your resolvers, time service, registries and Git/chart sources |
 

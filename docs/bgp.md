@@ -3,13 +3,15 @@
 Cilium allocates service IPs and advertises only the private gateway and LAN DNS
 as two `/32` routes to the directly connected LAN router. L2 service and pod
 announcements are disabled. Every profile inherits the `bgp` Flux stage; there
-is no optional attachment or enable flag to maintain.
+is no optional attachment or enable flag to maintain. Remove retired
+`BGP_ENABLED` and `LAN_INTERFACE_REGEX` keys from profiles and local env files;
+configuration validation rejects them, including `BGP_ENABLED=true`.
 
 Only stable control-plane nodes peer with the router. Workers can join, leave
 and use DHCP without router edits. A controller can forward to a backend on any
 worker using the existing VXLAN tunnel, `externalTrafficPolicy: Cluster` and
 SNAT. BGP does not replace the CNI, install node routes or advertise Pod CIDRs,
-ClusterIPs, the entire pool, or the optional public gateway. Both advertisements
+ClusterIPs, the entire pool, or a public gateway by default. Both private advertisements
 carry `no-advertise` so the receiving router must not propagate them to other
 BGP peers. Keep the LAN router's firewall private and WAN forwarding disabled;
 BGP communities are routing policy, not a client firewall.
@@ -77,11 +79,17 @@ Neither mode modifies the router, cluster or tracked profile.
 Review the generated file against a backup of the router's configuration. It
 stages exact import filters for `EDGE_IP/32` and `DNS_IP/32`, a deny-all export
 filter, passive controller neighbors and a two-prefix limit. Use the router's
-existing ASN and router-id if BGP is already configured; omit the generated
-router-id command if preserving a different existing ID. Generated policy names
+existing ASN if BGP is already configured. The generator preserves the global
+router ID by omitting that command. For a fresh router, explicitly add
+`--router-id 192.168.2.1` with its chosen nonzero IPv4 ID; omit that option when
+adding another cluster to an existing router. Generated policy names
 `ELEKTRO-<PROFILE>-IN/OUT` must be reserved for this cluster, with no extra permit
 rules. Apply the file's commands in the EdgeOS CLI. They end at `compare` so you
 can inspect the diff, then execute `commit`, `save`, `exit` yourself.
+
+Regeneration is repeatable but does not inspect or delete old neighbors, prefix
+rules or DNS options. Remove retired entries explicitly after reviewing the
+router diff; generating a file alone cannot establish the effective router policy.
 
 The generated configuration has no redistribution, default/Pod/Service route,
 static route, NAT, WAN firewall change, or eBGP multihop. If a LAN-local router
@@ -102,9 +110,18 @@ A green Flux stage alone therefore does not prove LAN connectivity.
 
 After direct DNS acceptance, use `--dns-forwarding` to include the router's
 conditional forwarder for this profile's suffix, or follow [the DNS runbook](dns.md#edgerouter-conditional-forwarding).
+This option requires `BGP_ROUTER_IP` inside `DNS_CLIENT_CIDR`; also verify the
+router's actual query source uses that allowed address.
 Keep clients on router DNS and keep cluster hosts' bootstrap DNS independent.
 If the router rejects private DNS responses, use the existing suffix-specific
 DNS rebind exception procedure; do not disable protection globally.
+
+The [public-gateway example](../examples/public-exposure/README.md) supplies a
+separate opt-in BGP advertisement. Only after choosing that setup, generate with
+`--include-public` to admit its exact third `/32` and raise the neighbor limit to
+three. Keep that flag on subsequent refreshes while the public gateway is enabled.
+Neither the flag nor allocating `PUBLIC_EDGE_IP` installs the gateway or enables
+WAN forwarding. The default remains two private service routes.
 
 ## Migrate an existing L2 installation
 
@@ -139,7 +156,8 @@ and client routing prerequisites are ready.
 
    Flux prunes its former `CiliumL2AnnouncementPolicy/lan`. Other manually managed
    L2 policies must be retired by their owner; the disabled agent feature prevents
-   all Cilium L2 announcements. Pool updates can reassign Service IPs; wait for
+   Cilium service/pod L2 announcements. Ordinary node ARP and a separately enabled
+   kube-vip API are independent. Pool updates can reassign Service IPs; wait for
    the actual DNS and gateway allocations to match the profile.
 5. Verify both BGP `/32`s and direct DNS/HTTPS using the new VIPs. Update router
    suffix forwarding and any direct-DNS DHCP/NRPT/client settings from the old
@@ -182,13 +200,13 @@ kubectl -n envoy-gateway-system get services -o wide
 kubectl get ciliumbgpclusterconfigs,ciliumbgpnodeconfigs
 kubectl get ciliuml2announcementpolicies
 kubectl -n kube-system get configmap cilium-config \
-  -o jsonpath='{.data.enable-bgp-control-plane}{"\n"}{.data.enable-l2-announcements}{"\n"}'
+  -o jsonpath='{.data.enable-bgp-control-plane}{"\n"}{.data.enable-l2-announcements}{"\n"}{.data.enable-l2-pod-announcements}{"\n"}'
 dig @10.44.0.242 grafana.admin.internal +short
 dig @10.44.0.242 k8s2.hosts.internal +short
 dig @192.168.2.1 grafana.admin.internal +short
 ```
 
-Expect BGP `true`, L2 `false` (or an absent false key), no old `lan` L2 policy,
+Expect BGP `true`, both L2 features `false` (or absent false keys), no old `lan` L2 policy,
 gateway DNS `10.44.0.240`, and the node's current LAN address. Test HTTPS by
 hostname with the existing trusted private CA from an ordinary LAN client.
 Unlike the former on-link pool, that client's traffic now uses the router.

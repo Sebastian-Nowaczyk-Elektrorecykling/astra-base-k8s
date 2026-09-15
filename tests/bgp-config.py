@@ -39,8 +39,25 @@ assert 'set policy prefix-list ELEKTRO-LAPTOPS-OUT rule 10 le 32' in commands
 assert not any('redistribute' in line or ' network ' in line or 'multihop' in line for line in commands)
 assert {line.split()[5] for line in commands if ' neighbor ' in line} == set(ips)
 assert sum(line.endswith('maximum-prefix 2') for line in commands) == 3
+assert 'parameters router-id' not in config
+assert 'set protocols bgp 64512 parameters router-id 192.168.2.1' in setup.router_config(
+    settings, ips, router_id='192.168.2.1')
+for router_id in ('0.0.0.0', '224.0.0.1', '255.255.255.255', '::1', '192.168.2.1; commit'):
+    rejects(setup.router_config, settings, ips, router_id=router_id)
 assert 'service dns forwarding' not in config
 assert f"server=/internal/{settings['DNS_IP']}" in setup.router_config(settings, ips, True)
+restricted_dns = {**settings, 'DNS_CLIENT_CIDR': '192.168.2.128/25'}
+assert setup.router_config(restricted_dns, ips)
+rejects(setup.router_config, restricted_dns, ips, dns_forwarding=True)
+public = {**settings, 'PUBLIC_EDGE_IP': '10.44.0.241', 'IDENTITY_HOST': 'login.example.org'}
+assert '10.44.0.241/32' not in setup.router_config(public, ips)
+public_config = setup.router_config(public, ips, include_public=True)
+assert 'set policy prefix-list ELEKTRO-LAPTOPS-IN rule 30 prefix 10.44.0.241/32' in public_config
+assert public_config.count('maximum-prefix 3') == len(ips)
+assert public_config.count(' action permit') == 3
+rejects(setup.router_config, settings, ips, include_public=True)
+rejects(setup.router_config, {**settings, 'PUBLIC_EDGE_IP': '10.44.0.241'}, ips, include_public=True)
+rejects(setup.router_config, {**settings, 'IDENTITY_HOST': 'login.example.org'}, ips, include_public=True)
 for addresses in ([], [ips[0], ips[0]], ['192.168.2.1'], ['192.168.3.10'],
                   ['192.168.2.0'], ['192.168.2.255'], ['127.0.0.1'], ['2001:db8::1'],
                   ['192.168.2.153; commit']):

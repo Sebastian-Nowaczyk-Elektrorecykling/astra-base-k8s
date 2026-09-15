@@ -103,6 +103,6 @@ The default is for a trusted private LAN; cluster-internal identity requests use
 - [Validation and security acceptance checks](docs/validation.md)
 - [Upstream release pins and references](docs/upstream.md)
 
-The `examples/` directory is **not reconciled**. It contains the downstream repository starter and its base attachment, a CNPG cluster with required network allowances, a GPU smoke job, optional kube-vip/NVIDIA reconciliation, public certificates, explicit public exposure and backup examples. Enable only the pieces you need. Flux infrastructure namespaces and their RBAC are reserved for platform administrators; do not grant applications namespace-admin access there.
+The `examples/` directory is **not reconciled**. It contains the downstream repository starter and its base attachment, a CNPG cluster with required network allowances, a GPU smoke job, an optional ARP-based API VIP exception and NVIDIA reconciliation, public certificates, explicit public exposure and backup examples. Enable only the pieces you need. Flux infrastructure namespaces and their RBAC are reserved for platform administrators; do not grant applications namespace-admin access there.
 
 For services on top of this base, use a separate Git source and reconciliation attached from `clusters/NAME`. Reuse the installed Flux controllers. The contract describes resource ownership, dependencies, per-profile substitutions, identity grants, network policies, SOPS, data retention and acceptance checks; the starter includes `AGENTS.md` for future human and AI authors.

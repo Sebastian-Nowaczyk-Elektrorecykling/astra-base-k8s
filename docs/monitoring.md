@@ -51,7 +51,7 @@ platform repository.
 
 Flux installs the stack automatically after storage and network policies are
 ready. The Grafana route waits for both monitoring and the existing protected
-gateway access policy. No node IP list or new LAN service IP is needed; the
+gateway access policy. No node IP list or additional routed service VIP is needed; the
 existing wildcard DNS, certificate and `EDGE_IP` already cover the hostname.
 
 The chart's rule-validation webhook may still be starting when its first rules
@@ -63,7 +63,7 @@ uninstalling would restart that bootstrap dependency. The webhook remains
 
 The initial realm import includes the Grafana callback.
 
-1. Initialize OpenFGA if you have not yet done bootstrap part 5. Follow
+1. Initialize OpenFGA if you have not yet done the bootstrap permission-initialization step. Follow
    [the grant procedure](identity-access.md#initialize-openfga), with your Keycloak
    user UUID and object `service:grafana.admin.internal`. For example, the request
    body in `local/grafana-grant.json` is:

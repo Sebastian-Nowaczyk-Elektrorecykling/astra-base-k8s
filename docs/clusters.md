@@ -38,7 +38,7 @@ Use a **LAN address** for the API and distinct **off-link service VIPs** for DNS
 | `IDENTITY_HOST` | `keycloak.admin.INTERNAL_DOMAIN` for private access. Existing cluster: `keycloak.admin.internal`. The public-exposure runbook covers changing the canonical issuer later. |
 | `PUBLIC_EDGE_IP` | Leave the shared default `NOT_CONFIGURED` until deliberately enabling the separate public gateway. |
 | `BGP_ROUTER_IP`, `BGP_LOCAL_ASN`, `BGP_PEER_ASN` | Actual directly connected LAN router and cluster/router private ASNs. BGP is always enabled and reconciled; see [generated EdgeRouter setup](bgp.md#generate-the-router-setup). |
-| `API_VIP`, `API_VIP_INTERFACE` | Optional kube-vip address and wired interface; set both when enabling the [HA example](high-availability.md#add-controllers). The VIP must be on the LAN and outside the entire Cilium service pool. |
+| `API_VIP`, `API_VIP_INTERFACE` | Optional **ARP-based API HA exception**, independent of Cilium; set both only when deliberately enabling the [API VIP example](high-availability.md#optional-arp-api-vip). Prefer an external TCP load balancer for API HA without ARP VIP announcements. The VIP must be on the LAN and outside the entire Cilium service pool. |
 | `PG_IMAGE` | Shared PostgreSQL image pin; normally leave the default. |
 | `FGA_STORE_ID`, `FGA_MODEL_ID` | Start with the shared `NOT_CONFIGURED` defaults. After initializing OpenFGA **on this cluster**, put its returned IDs in this profile. Do not reuse another cluster's IDs. |
 
@@ -62,18 +62,18 @@ bash scripts/configure-cluster.sh --export production > local/production/cluster
 
 The creator installs nothing and contacts no cluster. It builds a new entry point from the template, reuses the shared base and generates the pinned Flux controller manifests. It refuses to overwrite an existing profile, and copies no age keys, kubeconfig, encrypted credentials, OpenFGA state or generated sync from `laptops`.
 
-Use the exported env file on that cluster's nodes. It contains `CLUSTER_NAME`, API endpoint, Pod/Service networks, kube-dns IP and the private suffix. Editing the tracked profile and re-exporting avoids maintaining these values twice. `configure-cluster.sh FILE` can import a trusted exported env file when deliberately changing an API endpoint. `CLUSTER_NAME` and `INTERNAL_DOMAIN` are required, so an unnamed old file cannot select a cluster implicitly.
+Use the exported env file on that cluster's nodes. It contains `CLUSTER_NAME`, API endpoint, Pod/Service networks, kube-dns IP, the private suffix, and the LAN/BGP/service-pool settings. `--check` therefore detects stale router and VIP values as well as bootstrap network changes. Editing the tracked profile and re-exporting avoids maintaining these values twice. `configure-cluster.sh FILE` can import a trusted exported env file when deliberately changing an API endpoint. `CLUSTER_NAME` and `INTERNAL_DOMAIN` are required, so an unnamed old file cannot select a cluster implicitly.
 
 Follow the normal [bootstrap runbook](bootstrap.md) with your new node names and files. For example:
 
 ```sh
 # On the new controller: choose its actual stable LAN IP.
-sudo bash scripts/install-k3s.sh --role hybrid --name control-a --ip 192.168.2.154 \
+sudo bash scripts/install-k3s.sh --role hybrid --name control-a --ip 192.168.60.11 \
   --config local/production/cluster.env --init
 
 # On any freshly prepared DHCP worker, with the new cluster's token file:
 sudo bash scripts/install-k3s.sh --role worker --name inference-east --ip auto \
-  --config local/production/cluster.env --server https://192.168.2.154:6443 \
+  --config local/production/cluster.env --server https://192.168.60.11:6443 \
   --token-file /root/k3s-join-token
 ```
 
@@ -84,13 +84,15 @@ Back on the workstation, copy the new cluster's admin kubeconfig into `local/pro
 ```sh
 export KUBECONFIG="$PWD/local/production/kubeconfig"
 bash scripts/bootstrap-cilium.sh local/production/cluster.env
+python3 scripts/configure-bgp.py production --discover > local/production/edgerouter-bgp.txt
+# Review/apply this cluster's router neighbors and filters; see docs/bgp.md.
 age-keygen -o local/production/age.agekey
 bash scripts/generate-secrets.sh "$(age-keygen -y local/production/age.agekey)" production
 # Commit/push the new profile and any intentional shared changes.
 bash scripts/bootstrap-flux.sh local/production/age.agekey local/production/cluster.env
 ```
 
-Generate the age key **once** and keep a secure recovery copy. Complete the CA trust/OpenFGA steps for this cluster; `bootstrap-openfga.sh KEYFILE production` records state under `local/production`. Both Cilium and Flux bootstrap check the selected API endpoint against the current kubeconfig, and refuse a different live cluster name. Flux's GitHub owner/repository is read from `origin`; each cluster gets its own read-only deploy key.
+Generate the age key **once** and keep a secure recovery copy. Complete [BGP/DNS acceptance](bgp.md#addresses-dns-and-acceptance) and the CA trust/OpenFGA steps for this cluster; `bootstrap-openfga.sh KEYFILE production` records state under `local/production`. Both Cilium and Flux bootstrap check the selected API endpoint against the current kubeconfig, and refuse a different live cluster name. Flux's GitHub owner/repository is read from `origin`; each cluster gets its own read-only deploy key.
 
 Shared changes reconcile into every cluster following that Git revision. Use a separate branch/pinned revision when deliberately staging an upgrade; sharing manifests does not itself create an upgrade promotion process.
 
@@ -111,7 +113,30 @@ Only machines registered with this Kubernetes API are discovered this way. For a
 
 ## Two clusters on the same LAN
 
-Use disjoint Cilium pools and distinct DNS/gateway IPs. For example, exclude `.240`–`.254` from DHCP once, then allocate `.240`–`.249` to `laptops` and `.250`–`.254` to `production`. Use different Pod/Service CIDRs if the clusters may communicate through routing, VPN or multi-cluster networking later. The new-profile template starts with `10.52.0.0/16`, `10.53.0.0/16` and `10.53.0.10` so it differs from the existing cluster.
+Use distinct off-link service subnets, VIPs and cluster ASNs. For example:
+
+| Setting | laptops | production on the same LAN |
+| --- | --- | --- |
+| `LAN_CIDR` / `DNS_CLIENT_CIDR` | `192.168.2.0/24` | `192.168.2.0/24` |
+| `API_HOST` | `192.168.2.153` | `192.168.2.154` |
+| `BGP_ROUTER_IP` / `BGP_PEER_ASN` | `192.168.2.1` / `64512` | `192.168.2.1` / `64512` |
+| `BGP_LOCAL_ASN` | `64513` | `64514` |
+| `LB_CIDR` | `10.44.0.0/24` | `10.54.0.0/24` |
+| `LB_START`–`LB_STOP` | `10.44.0.240`–`10.44.0.249` | `10.54.0.240`–`10.54.0.249` |
+| `EDGE_IP` / `DNS_IP` | `10.44.0.240` / `10.44.0.242` | `10.54.0.240` / `10.54.0.242` |
+| `POD_CIDR` / `SERVICE_CIDR` | `10.42.0.0/16` / `10.43.0.0/16` | `10.52.0.0/16` / `10.53.0.0/16` |
+| `CLUSTER_DNS` | `10.43.0.10` | `10.53.0.10` |
+
+These are examples, not discovered free networks. Edit the second profile's
+node LAN/API/router/ASN from its template values before exporting or installing.
+The template is reused for every new profile; it cannot allocate a unique subnet
+or ASN for you. Check all cluster, LAN and VPN ranges together. No service-pool
+DHCP exclusion or on-link VIP is used. Reserve the controller IPs only.
+
+Generate each profile's router snippet and apply both sets of named filters and
+neighbors to the same router. Preserve its existing global ASN/router ID; do not
+pass `--router-id` when adding the second cluster. The router must learn all four
+private service `/32`s before relying on cross-cluster DNS or HTTPS.
 
 The same hostname cannot select two different clusters in one DNS view. Keep `internal` on `laptops` and choose `production.internal` for the second cluster, or use isolated LAN/VPN resolver views. To have clients use the laptops DNS IP for both, add a conditional forwarding block to **`clusters/laptops/dns-forwarding.yaml`**:
 
@@ -121,10 +146,10 @@ data:
     production.internal:1053 {
         errors
         cache 30
-        forward . 192.168.2.252
+        forward . 10.54.0.242
     }
 ```
 
-Replace `.252` with the production cluster's reserved `DNS_IP` and permit the first cluster's node addresses through its `DNS_CLIENT_CIDR`. The more specific forwarded zone takes precedence over `*.internal`; new production application/node names then work without adding individual records. `kube-system/lan-dns` reloads this ConfigMap through CoreDNS's supported import. Do not configure reciprocal forwarding of the same zone. Both resolvers can keep independent upstreams for public DNS.
+Replace `10.54.0.242` with the production cluster's routed `DNS_IP` and permit the first cluster's node addresses through its `DNS_CLIENT_CIDR`. The more specific forwarded zone takes precedence over `*.internal`; new production application/node names then work without adding individual records. `kube-system/lan-dns` reloads this ConfigMap through CoreDNS's supported import. Do not configure reciprocal forwarding of the same zone. Both resolvers can keep independent upstreams for public DNS.
 
 Do not list two cluster resolvers as client-side primary/secondary unless they serve the same DNS view. Import the public root certificate from each cluster on clients that access both. DNS forwarding creates no public route, Internet port-forward, identity permission or application deployment.

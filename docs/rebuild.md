@@ -144,7 +144,7 @@ dig @10.44.0.242 grafana.admin.internal +short
 
 Verify the node answer is its current LAN IP and Grafana resolves to `10.44.0.240`.
 Complete [DNS checks](dns.md), [access checks](validation.md) and a disposable
-PVC/database test before keeping data. Point clients/DHCP back at `.242` only
+PVC/database test before keeping data. Prefer router suffix forwarding; point direct-DNS clients/DHCP at `10.44.0.242` only
 after the resolver works. Verify the GPU node's plugin/capacity and
 run its [GPU smoke test](gpu.md#enable-the-device-plugin-and-verify-the-joined-node).
 Complete [BGP acceptance](bgp.md#addresses-dns-and-acceptance) before relying on LAN DNS/HTTPS; there is no L2 fallback.

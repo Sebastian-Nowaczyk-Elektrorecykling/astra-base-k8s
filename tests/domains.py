@@ -116,7 +116,7 @@ subprocess.run(['kubectl', 'apply', '--server-side', '--field-manager=elektro-va
                input=yaml.safe_dump_all(render('infrastructure/admission/guards.yaml', values)),
                text=True, check=True, stdout=subprocess.DEVNULL)
 subprocess.run(['kubectl', 'create', 'namespace', 'app-foo'], check=True, stdout=subprocess.DEVNULL)
-public_objects = [obj for part in ['edge', 'certificate', 'access', 'routes']
+public_objects = [obj for part in ['edge', 'certificate', 'access', 'routes', 'bgp']
                   for obj in render(f'examples/public-exposure/{part}/resources.yaml', values)]
 wait_for_admission([route('fuzzy.elektrorecykling.pl', public=True)] + public_objects,
                    'Updated public-exposure admission policies did not become effective')

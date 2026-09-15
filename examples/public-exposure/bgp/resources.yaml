@@ -1,0 +1,22 @@
+# Explicit public-gateway opt-in; never included by the shared base.
+# The route stays on the LAN router; WAN firewall/NAT is a separate decision.
+apiVersion: cilium.io/v2
+kind: CiliumBGPAdvertisement
+metadata:
+  name: public-gateway
+  labels:
+    elektro.local/bgp: lan-services
+spec:
+  advertisements:
+  - advertisementType: Service
+    attributes:
+      communities:
+        wellKnown: [no-advertise]
+    service:
+      addresses:
+      - LoadBalancerIP
+    selector:
+      matchLabels:
+        io.kubernetes.service.namespace: envoy-gateway-system
+        gateway.envoyproxy.io/owning-gateway-namespace: edge
+        gateway.envoyproxy.io/owning-gateway-name: public

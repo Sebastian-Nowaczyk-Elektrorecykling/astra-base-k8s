@@ -240,6 +240,7 @@ def render():
             config = next(d for d in objs if d.get('kind') == 'ConfigMap' and d['metadata']['name'] == 'cilium-config')
             assert config['data']['enable-bgp-control-plane'] == 'true'
             assert config['data'].get('enable-l2-announcements', 'false') == 'false'
+            assert config['data'].get('enable-l2-pod-announcements', 'false') == 'false'
             # Bootstrap and Flux use the same BGP/L2 configuration without flag overrides.
             bootstrap = run('helm', 'template', name, str(chart_path), '--namespace', 'kube-system',
                             '--values', str(ROOT / 'infrastructure/cilium/values.yaml'),

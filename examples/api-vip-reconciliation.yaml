@@ -1,3 +1,4 @@
+# Explicit ARP-based API HA exception, not part of the BGP-only base.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:

@@ -8,6 +8,10 @@ Edit the tracked `clusters/laptops/settings.yaml`, retaining your actual API and
 
 ```yaml
   LAN_CIDR: 192.168.2.0/24
+  BGP_ROUTER_IP: 192.168.2.1
+  LB_CIDR: 10.44.0.0/24
+  LB_START: 10.44.0.240
+  LB_STOP: 10.44.0.249
   EDGE_IP: 10.44.0.240
   DNS_IP: 10.44.0.242
   DNS_CLIENT_CIDR: 192.168.2.0/24
@@ -38,7 +42,7 @@ kubectl -n kube-system rollout status deployment/lan-dns --timeout=5m
 kubectl -n kube-system get service lan-dns
 ```
 
-The normal Flux dependency graph performs this ordering automatically. Existing clusters do not need another Cilium/Flux bootstrap. `local/cluster.env` does not configure this service; Flux reads the tracked settings. Wait for the Service's `EXTERNAL-IP` to equal `DNS_IP`, then test it before changing client DNS. A pending IP usually means the address is outside the pool, already allocated, or the updated network resources have not reconciled.
+The normal Flux dependency graph performs this ordering automatically. Existing clusters do not need another Cilium/Flux bootstrap. Flux reads the tracked settings. Re-export `local/cluster.env` after editing the profile: exports include LAN/DNS/BGP values, and `configure-cluster.sh --check` rejects stale values. An intentional env import changes the tracked profile for review; Flux cannot read the ignored env file. Wait for the Service's `EXTERNAL-IP` to equal `DNS_IP` and verify its BGP route, then test it before changing client DNS. A pending IP usually means the address is outside the pool, already allocated, or the updated network resources have not reconciled.
 
 
 ## EdgeRouter conditional forwarding
@@ -62,6 +66,12 @@ commit
 save
 exit
 ```
+
+When migrating from an older `DNS_IP`, delete only its exact
+`server=/internal/OLD_DNS_IP` option in the same reviewed configuration session
+before adding the replacement. Do not leave two servers for the same suffix.
+`configure-bgp.py --dns-forwarding` generates the new option but never deletes
+existing router settings.
 
 If DNS forwarding is not yet enabled, configure its actual trusted LAN listening
 interface under **Services → DNS → DNS Forwarding**, retain independent upstream
@@ -141,7 +151,7 @@ getent ahostsv4 longhorn.admin.internal
 
 Reactivating a connection briefly interrupts it. On other operating systems use the adapter's DNS setting, or let DHCP distribute `DNS_IP`. Remove unwanted manually configured IPv6 DNS servers too. Do not add a public DNS address as a client-side “secondary”: clients can use it even while the internal resolver is healthy, causing intermittent `.internal` failures. For redundancy use another resolver serving the same internal zones. Browsers/VPNs with their own encrypted DNS must use the OS resolver or an internal-zone exception.
 
-For Windows, prefer [router DNS or a suffix-only Windows policy](windows-clients.md), with verification and removal commands. DNS does not install the private TLS root on clients. Complete the [CA trust step](bootstrap.md#5-trust-tls-initialize-permissions-log-in) before using internal HTTPS services; [private TLS operations](tls.md) explains renewal and recovery.
+For Windows, prefer [router DNS or a suffix-only Windows policy](windows-clients.md), with verification and removal commands. DNS does not install the private TLS root on clients. Complete the [CA trust step](bootstrap.md#6-trust-tls-initialize-permissions-log-in) before using internal HTTPS services; [private TLS operations](tls.md) explains renewal and recovery.
 
 ## Pods, updates and availability
 

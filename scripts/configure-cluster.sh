@@ -4,13 +4,20 @@ set -euo pipefail
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 # shellcheck source=lib/cluster-settings.sh
 source "$repo/scripts/lib/cluster-settings.sh"
+bootstrap_keys=(CLUSTER_NAME API_HOST POD_CIDR SERVICE_CIDR CLUSTER_DNS INTERNAL_DOMAIN)
+network_keys=(LAN_CIDR LB_CIDR EDGE_IP DNS_IP DNS_CLIENT_CIDR DNS_UPSTREAMS LB_START LB_STOP BGP_ROUTER_IP BGP_LOCAL_ASN BGP_PEER_ASN IDENTITY_HOST PUBLIC_EDGE_IP)
 for cmd in kubectl jq python3; do command -v "$cmd" >/dev/null; done
 if [[ ${1:-} == --export && $# == 2 ]]; then
   select_cluster "$2"
   current=$(cluster_settings_json)
+  jq -e --arg cluster "$cluster_name" '.data.CLUSTER_NAME == $cluster' <<<"$current" >/dev/null || {
+    echo 'CLUSTER_NAME in settings.yaml does not match its directory.' >&2; exit 2;
+  }
   python3 "$repo/scripts/validate-cluster.py" <<<"$current"
   echo '# Generated from the selected GitOps profile; contains no credentials.'
-  jq -r '.data | to_entries[] | select(.key | IN("CLUSTER_NAME","API_HOST","POD_CIDR","SERVICE_CIDR","CLUSTER_DNS","INTERNAL_DOMAIN")) | .key + "=" + (.value | @sh)' <<<"$current"
+  for key in "${bootstrap_keys[@]}" "${network_keys[@]}"; do
+    jq -r --arg key "$key" '$key + "=" + (.data[$key] | @sh)' <<<"$current"
+  done
   exit 0
 fi
 check=false
@@ -21,6 +28,9 @@ if [[ ${1:-} == --check ]]; then check=true; shift; fi
 # Administrator-controlled shell configuration, also consumed by install-k3s.sh.
 # shellcheck source=/dev/null
 source "$1"
+[[ ! ${BGP_ENABLED+x} && ! ${LAN_INTERFACE_REGEX+x} ]] || {
+  echo 'Remove retired BGP_ENABLED and LAN_INTERFACE_REGEX settings; export the BGP-only profile again.' >&2; exit 2;
+}
 select_cluster "${CLUSTER_NAME:?Export a named profile with configure-cluster.sh --export first.}"
 current=$(cluster_settings_json)
 jq -e --arg cluster "$cluster_name" '.data.CLUSTER_NAME == $cluster' <<<"$current" >/dev/null || {
@@ -32,7 +42,7 @@ for key in API_HOST POD_CIDR SERVICE_CIDR CLUSTER_DNS INTERNAL_DOMAIN; do
   patch=$(jq --arg key "$key" --arg value "${!key}" '.data[$key]=$value' <<<"$patch")
 done
 # Optional LAN settings can also be supplied by an existing administrator env file.
-for key in LAN_CIDR LB_CIDR EDGE_IP DNS_IP DNS_CLIENT_CIDR DNS_UPSTREAMS LB_START LB_STOP BGP_ROUTER_IP BGP_LOCAL_ASN BGP_PEER_ASN IDENTITY_HOST PUBLIC_EDGE_IP; do
+for key in "${network_keys[@]}"; do
   if [[ -n ${!key:-} ]]; then
     patch=$(jq --arg key "$key" --arg value "${!key}" '.data[$key]=$value' <<<"$patch")
   fi

@@ -31,8 +31,9 @@ def static():
                 anchors = {re.sub(r'[^\w\- ]', '', h.lower()).replace(' ', '-') for h in headings}
                 assert anchor in anchors, f'{path.relative_to(ROOT)}: missing heading {target}'
     reference = (ROOT / 'docs/scripts.md').read_text()
-    for script in (ROOT / 'scripts').glob('*.sh'):
-        assert f'`{script.name}`' in reference, f'Undocumented script: {script.name}'
+    for script in (ROOT / 'scripts').iterdir():
+        if script.suffix in ('.sh', '.py'):
+            assert any(f'`{name}`' in reference for name in (script.name, f'scripts/{script.name}')), f'Undocumented script: {script.name}'
     assert profile_settings()['BASE_CONTRACT_VERSION'] == '1'
     starter = ROOT / 'examples/downstream-repository'
     assert (starter / 'README.md').is_file() and (starter / 'AGENTS.md').is_file()

@@ -2,6 +2,30 @@
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
+  name: public-bgp
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 5m
+  path: ./infrastructure/public-exposure/bgp
+  prune: true
+  # Router sessions and actual Service routes need separate acceptance.
+  wait: false
+  sourceRef:
+    kind: GitRepository
+    name: applications
+  postBuild:
+    substituteFrom:
+    - kind: ConfigMap
+      name: cluster-settings
+  dependsOn:
+  - name: bgp
+  - name: public-edge
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
   name: public-certificate
   namespace: flux-system
 spec:
