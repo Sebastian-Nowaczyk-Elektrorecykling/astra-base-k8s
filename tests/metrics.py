@@ -63,6 +63,7 @@ def check_rendered():
     assert not config.getboolean('auth.proxy', 'enable_login_token')
     assert not config.getboolean('auth.anonymous', 'enabled')
     assert not config.getboolean('auth.basic', 'enabled')
+    assert not config.getboolean('plugins', 'preinstall_auto_update')
     assert config['users']['auto_assign_org_role'] == 'Viewer'
     print('Rendered metrics: private Services, trusted configuration discovery and proxy authentication verified.')
 
@@ -162,7 +163,8 @@ def runtime():
         assert status == 200 and any(s['metric'].get('nodename') == 'elektro-validation-control-plane'
                                      for s in data['data']['result']), data
         assert isinstance(dashboards, list) and len(dashboards) > 5, dashboards
-        assert request(13000, '/api/datasources/proxy/uid/prometheus/api/v1/query?query=up', verified)[0] == 200
+        status, data, _ = request(13000, '/api/datasources/proxy/uid/prometheus/api/v1/query?query=up', verified)
+        assert status == 200, data
         print('Upstream metrics stack is Ready; real node/kubelet samples, dashboards and Grafana auth/role checks passed.')
     finally:
         for process in forwards:

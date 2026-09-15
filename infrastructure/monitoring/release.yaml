@@ -200,6 +200,10 @@ spec:
         analytics:
           reporting_enabled: false
           check_for_updates: false
+        plugins:
+          # Keep the plugins shipped with the pinned image. Startup updates can
+          # stop a bundled backend before failing on the read-only image path.
+          preinstall_auto_update: false
         security:
           cookie_secure: true
           cookie_samesite: lax

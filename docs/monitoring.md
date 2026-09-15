@@ -162,6 +162,13 @@ dashboard JSON in those ConfigMaps; Grafana polls the mounted files. Data source
 are provisioned directly from Helm values and change through a Grafana rollout,
 without a password-based provisioning job.
 
+Grafana's `plugins.preinstall_auto_update` is disabled so startup preserves the
+bundled data-source plugins shipped with the pinned image. An attempted update
+can stop a plugin before failing to replace its files on the read-only image,
+leaving its provisioned data source unable to serve queries. Upgrade those
+plugins through a reviewed image/chart change; see the upstream
+[plugin update setting](https://grafana.com/docs/grafana/latest/setup-grafana/configure-grafana/#preinstall_auto_update).
+
 ## Verification and troubleshooting
 
 ```sh
